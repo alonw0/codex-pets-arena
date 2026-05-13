@@ -171,6 +171,12 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
     isResolving,
     status
   });
+  const primaryLogLine = renderedLogLines.length && !displayState.winner && !isClosed && !isResolving
+    ? renderedLogLines[renderedLogLines.length - 1]
+    : turnCopy.logLine;
+  const recentLogLines = renderedLogLines.length && primaryLogLine === renderedLogLines[renderedLogLines.length - 1]
+    ? renderedLogLines.slice(0, -1).slice(-2)
+    : renderedLogLines.slice(-2);
   const commandsLocked = Boolean(isClosed || battleId && (!isPlayerTurn || isResolving));
 
   return (
@@ -191,13 +197,17 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
       </div>
       <div className="battle-console">
         <div className="battle-log">
+          <div className={`battle-log-status battle-log-status-${turnCopy.tone}`}>
+            <strong>{turnCopy.title}</strong>
+            <span>{turnCopy.detail}</span>
+          </div>
           <div className="battle-log-lines">
-            <p>{turnCopy.logLine}</p>
-            {renderedLogLines.map((line) => (
-              <p key={line}>{line}</p>
+            <p className="battle-log-primary">{renderBattleText(primaryLogLine, displayState)}</p>
+            {recentLogLines.map((line, index) => (
+              <p className="battle-log-recent" key={`${line}-${index}`}>{renderBattleText(line, displayState)}</p>
             ))}
           </div>
-          <span>Turn {displayState.turn} / {timer}s</span>
+          <span className="battle-log-meta">Turn {displayState.turn} / {timer}s</span>
         </div>
         <div className="command-grid">
           <div className={commandsLocked ? "command-state command-state-locked" : "command-state command-state-ready"}>
@@ -273,7 +283,8 @@ function getTurnCopy({
     return {
       title: "Match complete",
       detail: `${winnerName} won.`,
-      logLine: `${winnerName} wins the match.`
+      logLine: `${winnerName} wins the match.`,
+      tone: "complete" as const
     };
   }
 
@@ -281,7 +292,8 @@ function getTurnCopy({
     return {
       title: "Fight closed",
       detail: "This battle is no longer active.",
-      logLine: "This fight is closed."
+      logLine: "This fight is closed.",
+      tone: "closed" as const
     };
   }
 
@@ -289,7 +301,8 @@ function getTurnCopy({
     return {
       title: "Resolving",
       detail: "The arena is applying the last action.",
-      logLine: status
+      logLine: status,
+      tone: "resolving" as const
     };
   }
 
@@ -297,7 +310,8 @@ function getTurnCopy({
     return {
       title: "Demo turn",
       detail: `Choose an action for ${displayState.player.name}.`,
-      logLine: `${displayState.player.name} is ready.`
+      logLine: `${displayState.player.name} is ready.`,
+      tone: "ready" as const
     };
   }
 
@@ -305,15 +319,37 @@ function getTurnCopy({
     return {
       title: "Your turn",
       detail: `Choose an action for ${displayState.player.name}.`,
-      logLine: `Your turn: choose an action for ${displayState.player.name}.`
+      logLine: `Your turn: choose an action for ${displayState.player.name}.`,
+      tone: "ready" as const
     };
   }
 
   return {
     title: `${displayState.opponent.name}'s turn`,
     detail: "Waiting for the opponent to choose.",
-    logLine: `${displayState.opponent.name}'s turn. Waiting for opponent.`
+    logLine: `${displayState.opponent.name}'s turn. Waiting for opponent.`,
+    tone: "waiting" as const
   };
+}
+
+function renderBattleText(text: string, displayState: BattleState) {
+  const names = [
+    { name: displayState.player.name, className: "battle-name-player" },
+    { name: displayState.opponent.name, className: "battle-name-opponent" }
+  ].filter((entry) => entry.name).sort((a, b) => b.name.length - a.name.length);
+
+  if (!names.length) return text;
+
+  const pattern = new RegExp(`(${names.map((entry) => escapeRegex(entry.name)).join("|")})`, "g");
+  return text.split(pattern).map((part, index) => {
+    const match = names.find((entry) => entry.name === part);
+    if (!match) return part;
+    return <span className={`battle-name ${match.className}`} key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function BattleLoading({ status }: { status: string }) {
@@ -340,11 +376,15 @@ function BattleLoading({ status }: { status: string }) {
       </div>
       <div className="battle-console">
         <div className="battle-log">
-          <div className="battle-log-lines">
-            <p>Preparing the arena...</p>
-            <p>Loading pet spritesheets...</p>
+          <div className="battle-log-status battle-log-status-resolving">
+            <strong>Loading</strong>
+            <span>Preparing sprites and battle state</span>
           </div>
-          <span>Turn -- / --s</span>
+          <div className="battle-log-lines">
+            <p className="battle-log-primary">Preparing the arena...</p>
+            <p className="battle-log-recent">Loading pet spritesheets...</p>
+          </div>
+          <span className="battle-log-meta">Turn -- / --s</span>
         </div>
         <div className="command-grid command-grid-disabled" aria-hidden="true">
           <button disabled type="button">Move</button>

@@ -940,25 +940,97 @@ select {
 .battle-log {
   border-right: 5px solid var(--line);
   display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
   padding: 20px;
+}
+
+.battle-log-status {
+  align-items: center;
+  border: 3px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.battle-log-status strong {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.battle-log-status span {
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1.25;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.battle-log-status-ready {
+  background: #dff4d7;
+}
+
+.battle-log-status-waiting,
+.battle-log-status-closed {
+  background: #eee5d4;
+  color: var(--muted);
+}
+
+.battle-log-status-resolving {
+  background: #e7e0f5;
+  color: var(--violet);
+}
+
+.battle-log-status-complete {
+  background: #ffe3a4;
 }
 
 .battle-log-lines {
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: 6px;
 }
 
 .battle-log p {
-  font-size: clamp(0.92rem, 2vw, 1.28rem);
   font-weight: 900;
   line-height: 1.25;
   margin: 0;
 }
 
-.battle-log span {
+.battle-log-primary {
+  font-size: clamp(1.05rem, 2.15vw, 1.48rem);
+}
+
+.battle-log-recent {
+  color: var(--muted);
+  font-size: clamp(0.78rem, 1.5vw, 0.98rem);
+}
+
+.battle-log-meta {
   align-self: end;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.battle-name {
+  border-radius: 5px;
+  display: inline-block;
+  padding: 0 4px;
+}
+
+.battle-name-player {
+  background: #d9ecff;
+  color: #2558a8;
+}
+
+.battle-name-opponent {
+  background: #ffe2d2;
+  color: #a44424;
 }
 
 .command-grid {
@@ -1193,8 +1265,28 @@ select {
     padding: 14px;
   }
 
-  .battle-log p {
-    font-size: 1rem;
+  .battle-log-status {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    padding: 7px 9px;
+  }
+
+  .battle-log-status strong {
+    font-size: 0.78rem;
+  }
+
+  .battle-log-status span {
+    font-size: 0.62rem;
+    text-align: left;
+  }
+
+  .battle-log-primary {
+    font-size: 1.05rem;
+  }
+
+  .battle-log-recent {
+    font-size: 0.82rem;
   }
 
   .command-grid {
