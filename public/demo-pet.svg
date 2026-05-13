@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 208" role="img" aria-label="Demo Codex pet">
+  <rect width="192" height="208" fill="none"/>
+  <path fill="#151515" d="M48 74h12V56h72v18h12v66h-12v18H60v-18H48z"/>
+  <path fill="#f8f4e8" d="M60 74h72v66H60z"/>
+  <path fill="#78d6bf" d="M72 50h48v24H72z"/>
+  <path fill="#222" d="M76 98h16v16H76zm44 0h16v16h-16z"/>
+  <path fill="#e85d75" d="M86 126h36v8H86z"/>
+  <path fill="#5d6df6" d="M42 140h24v20H42zm84 0h24v20h-24z"/>
+</svg>

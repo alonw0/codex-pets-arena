@@ -1,0 +1,133 @@
+import { NextResponse } from "next/server";
+import { ensureActiveSide, resolveActiveTurn } from "@/lib/battle/engine";
+import { normalizeBattleAction } from "@/lib/battle/db";
+import type { BattleAction, BattleState } from "@/lib/battle/types";
+import { createSupabaseServiceClient, getBearerUser } from "@/lib/supabase/server";
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { supabase, user, error } = await getBearerUser(request);
+  if (!supabase || !user) return NextResponse.json({ error }, { status: 401 });
+
+  const { id } = await params;
+  const body = (await request.json().catch(() => ({}))) as { action?: unknown };
+  const action = normalizeBattleAction(body.action);
+  if (!action) return NextResponse.json({ error: "Valid action is required." }, { status: 400 });
+
+  const { data: battle, error: battleError } = await supabase.from("battles").select("*").eq("id", id).maybeSingle<{
+    id: string;
+    player_id: string;
+    opponent_id: string;
+    player_pet_id: string;
+    opponent_pet_id: string;
+    current_turn: number;
+    state: BattleState;
+    status: string;
+  }>();
+
+  if (battleError || !battle) return NextResponse.json({ error: "Battle not found." }, { status: 404 });
+  if (battle.status !== "active") return NextResponse.json({ error: "Battle is not active." }, { status: 409 });
+  if (battle.player_id !== user.id && battle.opponent_id !== user.id) return NextResponse.json({ error: "Not a battle participant." }, { status: 403 });
+
+  const side = battle.player_id === user.id ? "player" : "opponent";
+  const battleState = ensureActiveSide(battle.state);
+  if (battleState.activeSide !== side) {
+    return NextResponse.json({ error: "It is not your turn.", state: battleState, activeSide: battleState.activeSide }, { status: 409 });
+  }
+  const turnNumber = battle.current_turn;
+
+  const { data: existingTurn } = await supabase
+    .from("battle_turns")
+    .select("*")
+    .eq("battle_id", id)
+    .eq("turn_number", turnNumber)
+    .maybeSingle<{
+      id: string;
+      player_action: BattleAction | null;
+      opponent_action: BattleAction | null;
+      resolved_log: unknown | null;
+      rng_seed: number;
+    }>();
+
+  if (existingTurn?.resolved_log) {
+    return NextResponse.json({ error: "Turn is already resolved." }, { status: 409 });
+  }
+
+  if (existingTurn?.[`${side}_action` as "player_action" | "opponent_action"]) {
+    return NextResponse.json({ error: "Action already submitted for this turn." }, { status: 409 });
+  }
+
+  const turnPatch = side === "player" ? { player_action: action } : { opponent_action: action };
+  const seed = Math.floor(Math.random() * 1_000_000_000);
+
+  const { data: turn, error: turnError } = existingTurn
+    ? await supabase.from("battle_turns").update(turnPatch).eq("id", existingTurn.id).select("*").single()
+    : await supabase
+        .from("battle_turns")
+        .insert({ battle_id: id, turn_number: turnNumber, rng_seed: seed, timeout_flags: {}, ...turnPatch })
+        .select("*")
+        .single();
+
+  if (turnError || !turn) return NextResponse.json({ error: turnError?.message ?? "Could not submit action." }, { status: 500 });
+
+  const resolved = resolveActiveTurn(battleState, action, seed);
+
+  const winnerId = resolved.state.winner === "player" ? battle.player_id : resolved.state.winner === "opponent" ? battle.opponent_id : null;
+  const updates = {
+    current_turn: resolved.state.turn,
+    state: resolved.state,
+    updated_at: new Date().toISOString(),
+    status: winnerId ? "complete" : "active",
+    winner_id: winnerId,
+    completed_at: winnerId ? new Date().toISOString() : null
+  };
+
+  const { error: battleUpdateError } = await supabase.from("battles").update(updates).eq("id", id);
+  if (battleUpdateError) return NextResponse.json({ error: battleUpdateError.message }, { status: 500 });
+
+  if (winnerId) {
+    const winnerPet = resolved.state.winner === "player" ? resolved.state.player : resolved.state.opponent;
+    const loserId = winnerId === battle.player_id ? battle.opponent_id : battle.player_id;
+    const winnerPetId = resolved.state.winner === "player" ? battle.player_pet_id : battle.opponent_pet_id;
+
+    const [petPersist, winPersist, lossPersist] = await Promise.all([
+      supabase
+        .from("pets")
+        .update({
+          level: winnerPet.level,
+          xp: winnerPet.xp,
+          stats: winnerPet.stats
+        })
+        .eq("id", winnerPetId),
+      incrementProfileResult(supabase, winnerId, "wins"),
+      incrementProfileResult(supabase, loserId, "losses")
+    ]);
+
+    const persistError = petPersist.error ?? winPersist ?? lossPersist;
+    if (persistError) return NextResponse.json({ error: persistError.message }, { status: 500 });
+  }
+
+  await supabase.from("battle_turns").update({ resolved_log: resolved.events }).eq("id", turn.id);
+  if (resolved.events.length) {
+    await supabase.from("battle_events").insert(
+      resolved.events.map((event) => ({
+        battle_id: id,
+        turn_number: turnNumber,
+        event
+      }))
+    );
+  }
+
+  return NextResponse.json({ status: "resolved", state: resolved.state, events: resolved.events, activeSide: resolved.state.activeSide });
+}
+
+async function incrementProfileResult(
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
+  profileId: string,
+  column: "wins" | "losses"
+) {
+  const { data, error } = await supabase.from("profiles").select(column).eq("id", profileId).maybeSingle<Record<"wins" | "losses", number>>();
+  if (error) return error;
+  const current = data?.[column] ?? 0;
+  const { error: updateError } = await supabase.from("profiles").update({ [column]: current + 1 }).eq("id", profileId);
+  return updateError;
+}
