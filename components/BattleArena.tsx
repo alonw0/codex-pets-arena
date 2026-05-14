@@ -306,6 +306,7 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
         <div className="player-sprite">
           <PetSprite animation={playerAnimation} name={displayState.player.name} scale={1.05} src={displayState.player.spriteUrl} />
         </div>
+        {resultSummary?.levelUp && resultSummary.outcome === "win" ? <LevelUpConfetti /> : null}
         <StatusPanel side="player" pet={displayState.player} />
       </div>
       <div className="battle-console">
@@ -427,7 +428,6 @@ function ResultPanel({
 
   return (
     <div className={result.outcome === "win" ? "result-panel result-panel-win" : "result-panel result-panel-loss"}>
-      {result.levelUp ? <LevelUpConfetti /> : null}
       <div className="result-heading">
         <Trophy size={22} />
         <div>
@@ -695,9 +695,23 @@ function PixelConfetti() {
 function LevelUpConfetti() {
   return (
     <div className="level-up-confetti" aria-hidden="true">
-      {Array.from({ length: 18 }, (_, index) => (
-        <span key={index} style={{ "--level-confetti-index": index } as React.CSSProperties} />
-      ))}
+      {Array.from({ length: 48 }, (_, index) => {
+        const angle = (index / 48) * Math.PI * 2;
+        const radius = 78 + (index % 4) * 22;
+        const x = Math.round(Math.cos(angle) * radius);
+        const y = Math.round(Math.sin(angle) * radius - 32);
+        return (
+          <span
+            key={index}
+            style={{
+              "--level-confetti-delay": `${(index % 8) * 24}ms`,
+              "--level-confetti-rot": `${index * 31}deg`,
+              "--level-confetti-x": `${x}px`,
+              "--level-confetti-y": `${y}px`
+            } as React.CSSProperties}
+          />
+        );
+      })}
     </div>
   );
 }
