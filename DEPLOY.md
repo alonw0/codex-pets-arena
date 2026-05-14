@@ -77,6 +77,7 @@ This creates:
 - `battles`
 - `battle_turns`
 - `battle_events`
+- `profile_badges`
 - RLS policies
 - `pet-assets` storage bucket
 - storage upload/read policies
@@ -88,6 +89,30 @@ supabase/security-hardening.sql
 ```
 
 That removes old browser-write policies from server-owned gameplay tables. Pet creation, move creation, matchmaking, lobby joins, battle turns, and battle results should go through the Next.js API routes, not direct browser writes.
+
+For an existing project created before badges were added, also run:
+
+```text
+supabase/gamification.sql
+```
+
+That creates `profile_badges` and its read policy. New projects get this from `supabase/schema.sql`.
+
+For an existing project created before arena counters were added, also run:
+
+```text
+supabase/arena-stats.sql
+```
+
+That adds `profiles.last_seen_at` and indexes used by the cached homepage/dashboard counters. New projects get this from `supabase/schema.sql`.
+
+For an existing project created before NPC Masters mode was added, also run:
+
+```text
+supabase/npc-masters.sql
+```
+
+That allows `battles` rows to store PvE master challenges where the opponent is not a Supabase auth user. New projects get this from `supabase/schema.sql`.
 
 The schema intentionally does not create Postgres extensions. Supabase projects normally provide `gen_random_uuid()` already. If your project does not recognize `gen_random_uuid()`, enable `pgcrypto` from the Supabase dashboard extension UI, then rerun the schema.
 
@@ -211,6 +236,7 @@ Fill it with:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-2.5-flash
@@ -220,6 +246,7 @@ Rules:
 
 - `NEXT_PUBLIC_SUPABASE_URL` is safe for the browser.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` is safe for the browser when RLS is enabled.
+- `NEXT_PUBLIC_SITE_URL` is safe for the browser. Set it to your production Vercel URL in Vercel so social cards, invite links, and share buttons point at the live site.
 - `SUPABASE_SERVICE_ROLE_KEY` must only be used server-side.
 - `GEMINI_API_KEY` must only be used server-side.
 - `GEMINI_MODEL` is optional. The default is `gemini-2.5-flash`.
@@ -462,6 +489,7 @@ Before launch:
 
 - Confirm RLS is enabled on all public tables.
 - Confirm browser clients cannot insert or update `pets`, `moves`, `lobbies`, `battles`, `battle_turns`, or `battle_events` directly.
+- Confirm browser clients cannot insert or update `profile_badges` directly.
 - Confirm pet and move creation goes through `POST /api/pets/create` using a user bearer token.
 - Confirm storage upload policy only allows user-owned folders.
 - Confirm matchmaking and lobby routes verify that the selected pet belongs to the authenticated user.

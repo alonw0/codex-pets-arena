@@ -30,6 +30,13 @@
   - [x] Basic damage lands around 5-15
   - [x] Basic fights finish in about 6-7 actions
   - [x] Legacy high-HP pets and high-power moves are normalized at battle load
+- [x] NPC Masters mode
+  - [x] Add curated master definitions
+  - [x] Add master challenge API
+  - [x] Auto-resolve NPC turns
+  - [x] Grant reduced training XP
+  - [x] Count master battles in trainer wins/losses while keeping PvP badges separate
+  - [x] Add dashboard master challenge UI
 
 ## In Progress
 
@@ -38,10 +45,40 @@
   - [x] Friend-code lobby persistence
   - [x] Waiting/ready states
   - [x] Basic reconnect restoration
-  - [ ] Rematch flow
+  - [x] Rematch flow
 
 ## Backlog
 
+- [x] Gamification: Win/lose result panel
+  - [x] Replace plain match-end text with a dedicated result panel
+  - [x] Show winner/loser state clearly
+  - [x] Show winner pet sprite in `waving` animation
+  - [x] Show XP gained
+  - [x] Show level-up state when applicable
+  - [x] Add actions: `Back to dashboard`, `Rematch`, `Share result`
+- [x] Gamification: Confetti on win
+  - [x] Trigger short pixel/confetti animation only for the winning player
+  - [x] Keep animation lightweight and non-blocking
+  - [x] Disable/reduce animation when user prefers reduced motion
+- [x] Gamification: XP and level-up animation
+  - [x] Animate XP bar fill after match completion
+  - [x] Show `LEVEL UP!` when the pet levels up
+  - [x] Show stat gains such as HP, attack, defense, special, and speed
+  - [x] Persist and display the final level/XP cleanly after animation
+- [x] Gamification: Badges
+  - [x] Add badge data model and RLS/server-write policy
+  - [x] Award first badge set: First Upload, First Win, Hot Streak, Comeback, Collector, Rivalry, Veteran
+  - [x] Show earned badges on dashboard/profile
+  - [x] Show newly earned badges on match result panel
+- [x] Gamification: Dashboard pet battle cards
+  - [x] Upgrade roster rows into richer pet cards
+  - [x] Show level badge, XP progress, affinity, record, and generated moves
+  - [x] Highlight selected active pet more clearly
+  - [x] Show badge/title slots on each pet card
+- [x] Gamification: Match intro and result recap
+  - [x] Add pre-fight intro: challenger text, sprite entrance, and short countdown
+  - [x] Add post-fight recap: turns, damage dealt, biggest hit, most-used move, XP earned
+  - [x] Keep recap readable on mobile
 - [ ] Optionally use saved/generated moves in `/battle/demo`
 - [ ] Production auth polish
 - [ ] Mobile and visual QA pass

@@ -1,5 +1,5 @@
 import { STARTER_MOVES } from "./moves";
-import { applyBattleProgression } from "./progression";
+import { applyBattleProgressionWithMultiplier } from "./progression";
 import type {
   Affinity,
   BattleAction,
@@ -93,7 +93,7 @@ export function ensureActiveSide(state: BattleState): BattleState {
   };
 }
 
-export function resolveActiveTurn(state: BattleState, action: BattleAction, seed: number): ResolvedTurn {
+export function resolveActiveTurn(state: BattleState, action: BattleAction, seed: number, options: { xpMultiplier?: number } = {}): ResolvedTurn {
   const next = ensureActiveSide(cloneBattleState(state));
   const side = next.activeSide;
   const targetSide = otherSide(side);
@@ -128,7 +128,7 @@ export function resolveActiveTurn(state: BattleState, action: BattleAction, seed
   if (!next.winner && getPet(next, targetSide).currentHp <= 0) {
     events.push({ kind: "faint", target: targetSide });
     next.winner = side;
-    const progression = applyBattleProgression(actor, getPet(next, targetSide));
+    const progression = applyBattleProgressionWithMultiplier(actor, getPet(next, targetSide), options.xpMultiplier ?? 1);
     events.push({ kind: "xp", target: side, amount: progression.xpGained, xp: actor.xp, nextLevelXp: progression.nextLevelXp });
     events.push({ kind: "message", text: `${actor.name} gained ${progression.xpGained} XP.` });
     if (progression.leveledUp) {
@@ -174,7 +174,7 @@ export function resolveTurn(state: BattleState, input: TurnInput): ResolvedTurn 
     if (getPet(next, targetSide).currentHp <= 0) {
       events.push({ kind: "faint", target: targetSide });
       next.winner = side;
-      const progression = applyBattleProgression(actor, getPet(next, targetSide));
+      const progression = applyBattleProgressionWithMultiplier(actor, getPet(next, targetSide), 1);
       events.push({ kind: "xp", target: side, amount: progression.xpGained, xp: actor.xp, nextLevelXp: progression.nextLevelXp });
       events.push({ kind: "message", text: `${actor.name} gained ${progression.xpGained} XP.` });
       if (progression.leveledUp) {

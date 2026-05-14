@@ -2,10 +2,12 @@ import Link from "next/link";
 import { Gamepad2, Upload, Users } from "lucide-react";
 import { BattleArena } from "@/components/BattleArena";
 import { BrandLogo } from "@/components/BrandLogo";
+import { getArenaStats } from "@/lib/arena/stats";
 import { createSupabaseCookieClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
   const supabase = await createSupabaseCookieClient();
+  const stats = await getArenaStats();
   const { data } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
   const isLoggedIn = Boolean(data.user);
 
@@ -29,6 +31,11 @@ export default async function HomePage() {
           <div className="button-row">
             <Link className="primary-button" href="/dashboard"><Gamepad2 size={18} /> Enter arena</Link>
             <Link className="secondary-button" href="/upload"><Upload size={18} /> Upload pet</Link>
+          </div>
+          <div className="arena-stats arena-stats-home" aria-label="Arena activity">
+            <span><strong>{formatCount(stats.pets)}</strong> Pets</span>
+            <span><strong>{formatCount(stats.trainers)}</strong> Trainers</span>
+            <span><strong>{formatCount(stats.online)}</strong> Online</span>
           </div>
         </div>
         <div className="hero-battle-preview">
@@ -54,4 +61,8 @@ export default async function HomePage() {
       </section>
     </main>
   );
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("en", { notation: value >= 10_000 ? "compact" : "standard" }).format(value);
 }

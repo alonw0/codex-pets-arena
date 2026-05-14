@@ -5,7 +5,7 @@ export const STALE_ACTIVE_BATTLE_MINUTES = 30;
 type BattleParticipantRow = {
   id: string;
   player_id: string;
-  opponent_id: string;
+  opponent_id: string | null;
   updated_at: string;
   state?: { log?: string[] };
 };

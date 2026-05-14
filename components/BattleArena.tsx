@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Flag, LoaderCircle, Shield, Swords, Zap } from "lucide-react";
+import { Copy, Flag, Link2, LoaderCircle, MessageCircle, RotateCcw, Send, Share2, Shield, Swords, Trophy, Zap } from "lucide-react";
 import { ensureActiveSide, resolveActiveTurn } from "@/lib/battle/engine";
 import { xpForNextLevel } from "@/lib/battle/progression";
 import type { BattleAction, BattleMove, BattleSide, BattleState, TurnEvent } from "@/lib/battle/types";
 import { createDemoBattle } from "@/lib/demo";
+import { buildShareLink, getClientShareUrl, nativeShareOrCopy, type SharePayload, type SharePlatform } from "@/lib/share";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PetSprite } from "./PetSprite";
 
@@ -22,9 +23,18 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
   const [mySide, setMySide] = useState<BattleSide>("player");
   const [status, setStatus] = useState(battleId ? "Loading battle..." : "");
   const [battleStatus, setBattleStatus] = useState<"active" | "complete" | "abandoned">("active");
+  const [battleMode, setBattleMode] = useState<"pvp" | "npc">("pvp");
+  const [npcMasterKey, setNpcMasterKey] = useState<string | null>(null);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [isLoadingBattle, setIsLoadingBattle] = useState(Boolean(battleId && !initialState));
   const [timer, setTimer] = useState(29);
+  const [shareStatus, setShareStatus] = useState("");
+  const [rematchStatus, setRematchStatus] = useState("");
+  const [rematchCode, setRematchCode] = useState("");
+  const [rematchBusy, setRematchBusy] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+  const npcAutoTurnKeyRef = useRef("");
+  const battleStateId = state?.id;
 
   useEffect(() => {
     if (!battleId) return;
@@ -37,13 +47,22 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
         if (preloadSprites) setIsLoadingBattle(true);
         const token = await getAccessToken();
         const response = await fetch(`/api/battles/${battleId}`, { headers: { authorization: `Bearer ${token}` } });
-        const payload = (await response.json()) as { battle?: { state: BattleState; status?: "active" | "complete" | "abandoned" }; events?: Array<{ event: TurnEvent }>; side?: BattleSide; error?: string };
+        const payload = (await response.json()) as {
+          battle?: { state: BattleState; status?: "active" | "complete" | "abandoned"; mode?: "pvp" | "npc"; npc_master_key?: string | null };
+          events?: Array<{ event: TurnEvent }>;
+          side?: BattleSide;
+          mode?: "pvp" | "npc";
+          npcMasterKey?: string | null;
+          error?: string;
+        };
         if (!response.ok || !payload.battle) throw new Error(payload.error ?? "Could not load battle.");
         const loadedState = ensureActiveSide(payload.battle.state);
         if (preloadSprites) await preloadBattleSprites(loadedState);
         if (cancelled) return;
         setState(loadedState);
         setBattleStatus(payload.battle.status ?? "active");
+        setBattleMode(payload.mode ?? payload.battle.mode ?? "pvp");
+        setNpcMasterKey(payload.npcMasterKey ?? payload.battle.npc_master_key ?? null);
         setEvents((payload.events ?? []).map((eventRow) => eventRow.event).slice(-12));
         setMySide(payload.side ?? "player");
         setStatus("");
@@ -91,6 +110,49 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
       if (channel && supabase) supabase.removeChannel(channel);
     };
   }, [battleId]);
+
+  useEffect(() => {
+    if (!battleStateId) return;
+    setShowIntro(true);
+    const timeout = window.setTimeout(() => setShowIntro(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [battleStateId]);
+
+  useEffect(() => {
+    if (!battleId || battleMode !== "npc" || battleStatus !== "active" || !state || state.winner) return;
+    if (mySide !== "player" || state.activeSide !== "opponent" || status === "Master responds") return;
+    const autoTurnKey = `${battleId}:${state.turn}`;
+    if (npcAutoTurnKeyRef.current === autoTurnKey) return;
+    npcAutoTurnKeyRef.current = autoTurnKey;
+
+    let cancelled = false;
+
+    async function resolveNpcTurn() {
+      try {
+        setStatus("Master responds");
+        const token = await getAccessToken();
+        const response = await fetch(`/api/battles/${battleId}/npc-turn`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` }
+        });
+        const payload = (await response.json()) as { state?: BattleState; events?: TurnEvent[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Could not resolve master turn.");
+        if (cancelled) return;
+        if (payload.state) setState(ensureActiveSide(payload.state));
+        if (payload.events) setEvents(payload.events);
+        setStatus("");
+      } catch (error) {
+        npcAutoTurnKeyRef.current = "";
+        if (!cancelled) setStatus(error instanceof Error ? error.message : "Could not resolve master turn.");
+      }
+    }
+
+    void resolveNpcTurn();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [battleId, battleMode, battleStatus, mySide, state, status]);
 
   if (!state || isLoadingBattle) {
     return <BattleLoading status={status} />;
@@ -152,8 +214,56 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
     }
   }
 
+  async function shareResult() {
+    if (!state?.winner) return;
+    const visibleState = mySide === "opponent" ? swapBattleState(state) : state;
+    const result = buildResultSummary(visibleState, getDisplayEvents(events, mySide));
+    const payload = buildResultSharePayload(result, battleMode);
+    try {
+      const outcome = await nativeShareOrCopy(payload);
+      setShareStatus(outcome === "shared" ? "Result shared." : "Result copied.");
+    } catch {
+      setShareStatus("Could not share result.");
+    }
+  }
+
+  async function createRematchLobby() {
+    if (!battleId || rematchBusy) return;
+    setRematchBusy(true);
+    setRematchStatus(battleMode === "npc" ? "Restarting master challenge..." : "Creating rematch code...");
+    try {
+      const token = await getAccessToken();
+      if (battleMode === "npc") {
+        const response = await fetch("/api/masters/challenge", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ petId: state?.player.id, masterKey: npcMasterKey ?? state?.opponent.id.replace(/^npc-/, "") })
+        });
+        const payload = (await response.json()) as { battleId?: string; error?: string };
+        if (!response.ok || !payload.battleId) throw new Error(payload.error ?? "Could not restart challenge.");
+        router.push(`/battle/${payload.battleId}`);
+        return;
+      }
+      const response = await fetch(`/api/battles/${battleId}/rematch`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      const payload = (await response.json()) as { lobby?: { code: string }; error?: string };
+      if (!response.ok || !payload.lobby) throw new Error(payload.error ?? "Could not create rematch.");
+      setRematchCode(payload.lobby.code);
+      setRematchStatus("Share this rematch code.");
+      await navigator.clipboard?.writeText(payload.lobby.code).catch(() => undefined);
+    } catch (error) {
+      setRematchStatus(error instanceof Error ? error.message : "Could not create rematch.");
+    } finally {
+      setRematchBusy(false);
+    }
+  }
+
   const latestAttack = [...events].reverse().find((event) => event.kind === "damage");
   const displayState = mySide === "opponent" ? swapBattleState(state) : state;
+  const displayEvents = getDisplayEvents(events, mySide);
+  const resultSummary = displayState.winner ? buildResultSummary(displayState, displayEvents) : null;
   const displayLatestAttack = mySide === "opponent" && latestAttack?.kind === "damage" ? { ...latestAttack, target: swapSide(latestAttack.target) } : latestAttack;
   const playerAnimation = animationFor("player", displayState.winner, displayLatestAttack);
   const opponentAnimation = animationFor("opponent", displayState.winner, displayLatestAttack);
@@ -161,10 +271,11 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
   const quickMoves = displayState.player.moves.filter((move) => move.category !== "status").slice(0, 2);
   const isClosed = battleStatus !== "active";
   const isPlayerTurn = !isClosed && !displayState.winner && displayState.activeSide === "player";
-  const isResolving = status === "Resolving turn..." || status === "Leaving fight...";
+  const isResolving = status === "Resolving turn..." || status === "Leaving fight..." || status === "Master responds";
   const renderedLogLines = displayState.winner ? [] : visibleLog;
   const turnCopy = getTurnCopy({
     battleId,
+    battleMode,
     displayState,
     isClosed,
     isPlayerTurn,
@@ -181,7 +292,9 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
 
   return (
     <section className="battle-shell">
+      {displayState.winner === "player" ? <PixelConfetti /> : null}
       <div className="battle-stage" aria-label="Codex pet battle arena">
+        {showIntro && !displayState.winner ? <MatchIntro battleMode={battleMode} player={displayState.player.name} opponent={displayState.opponent.name} /> : null}
         <StatusPanel side="opponent" pet={displayState.opponent} />
         <div className={isPlayerTurn ? "turn-banner turn-banner-ready" : "turn-banner turn-banner-waiting"}>
           <strong>{turnCopy.title}</strong>
@@ -210,61 +323,223 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
           <span className="battle-log-meta">Turn {displayState.turn} / {timer}s</span>
         </div>
         <div className="command-grid">
-          <div className={commandsLocked ? "command-state command-state-locked" : "command-state command-state-ready"}>
-            <strong>{commandsLocked ? "Actions locked" : "Choose action"}</strong>
-            <span>{commandsLocked ? turnCopy.detail : `${displayState.player.name} is ready.`}</span>
-          </div>
-          {displayState.winner ? (
-            <button className="dashboard-return-button" onClick={() => router.push("/dashboard")} type="button">
-              <Flag size={18} />
-              <span>
-                <strong>Back to dashboard</strong>
-                <small>Return to roster</small>
-              </span>
-            </button>
-          ) : null}
-          {quickMoves.map((move, index) => (
-            <MoveButton
-              icon={index === 0 ? <Swords size={18} /> : <Zap size={18} />}
-              key={move.id}
-              move={move}
-              petId={displayState.player.id}
-              charges={displayState.charges}
-              disabled={commandsLocked}
-              onChoose={() => choose({ type: "move", moveId: move.id })}
+          {resultSummary ? (
+            <ResultPanel
+              battleId={battleId}
+              onBack={() => router.push("/dashboard")}
+              onRematch={createRematchLobby}
+              onShare={shareResult}
+              rematchBusy={rematchBusy}
+              rematchCode={rematchCode}
+              rematchStatus={rematchStatus}
+              result={resultSummary}
+              shareStatus={shareStatus}
+              battleMode={battleMode}
             />
-          ))}
-          <button disabled={commandsLocked} onClick={() => choose({ type: "guard" })} type="button">
-            <Shield size={18} />
-            <span>
-              <strong>Guard</strong>
-              <small>Harder to hit</small>
-            </span>
-          </button>
-          <button disabled={commandsLocked} onClick={() => choose({ type: "yield" })} type="button">
-            <Flag size={18} />
-            <span>
-              <strong>Yield</strong>
-              <small>Forfeit</small>
-            </span>
-          </button>
-          {battleId ? (
-            <button className="leave-fight-button" disabled={leaveBusy} onClick={leaveFight} type="button">
-              <Flag size={18} />
-              <span>
-                <strong>{leaveBusy ? "Leaving..." : "Leave fight"}</strong>
-                <small>Close this match</small>
-              </span>
-            </button>
-          ) : null}
+          ) : (
+            <>
+              <div className={commandsLocked ? "command-state command-state-locked" : "command-state command-state-ready"}>
+                <strong>{commandsLocked ? "Actions locked" : "Choose action"}</strong>
+                <span>{commandsLocked ? turnCopy.detail : `${displayState.player.name} is ready.`}</span>
+              </div>
+              {quickMoves.map((move, index) => (
+                <MoveButton
+                  icon={index === 0 ? <Swords size={18} /> : <Zap size={18} />}
+                  key={move.id}
+                  move={move}
+                  petId={displayState.player.id}
+                  charges={displayState.charges}
+                  disabled={commandsLocked}
+                  onChoose={() => choose({ type: "move", moveId: move.id })}
+                />
+              ))}
+              <button disabled={commandsLocked} onClick={() => choose({ type: "guard" })} type="button">
+                <Shield size={18} />
+                <span>
+                  <strong>Guard</strong>
+                  <small>Harder to hit</small>
+                </span>
+              </button>
+              <button disabled={commandsLocked} onClick={() => choose({ type: "yield" })} type="button">
+                <Flag size={18} />
+                <span>
+                  <strong>Yield</strong>
+                  <small>Forfeit</small>
+                </span>
+              </button>
+              {battleId ? (
+                <button className="leave-fight-button" disabled={leaveBusy} onClick={leaveFight} type="button">
+                  <Flag size={18} />
+                  <span>
+                    <strong>{leaveBusy ? "Leaving..." : "Leave fight"}</strong>
+                    <small>Close this match</small>
+                  </span>
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
+type ResultSummary = {
+  outcome: "win" | "loss";
+  winner: BattleState["player"];
+  xpGained: number;
+  levelUp?: { oldLevel: number; newLevel: number };
+  newBadges: Array<{ badgeKey: string; label: string; title: string }>;
+  recap: {
+    totalDamage: number;
+    biggestHit: number;
+    favoriteMove: string;
+  };
+  turns: number;
+};
+
+function ResultPanel({
+  battleMode,
+  battleId,
+  onBack,
+  onRematch,
+  onShare,
+  rematchBusy,
+  rematchCode,
+  rematchStatus,
+  result,
+  shareStatus
+}: {
+  battleMode: "pvp" | "npc";
+  battleId?: string;
+  onBack: () => void;
+  onRematch: () => void;
+  onShare: () => void;
+  rematchBusy: boolean;
+  rematchCode: string;
+  rematchStatus: string;
+  result: ResultSummary;
+  shareStatus: string;
+}) {
+  const levelGain = result.levelUp ? result.levelUp.newLevel - result.levelUp.oldLevel : 0;
+  const xpPercent = Math.min(100, Math.round((result.winner.xp / xpForNextLevel(result.winner.level)) * 100));
+  const isTraining = battleMode === "npc";
+
+  return (
+    <div className={result.outcome === "win" ? "result-panel result-panel-win" : "result-panel result-panel-loss"}>
+      {result.levelUp ? <LevelUpConfetti /> : null}
+      <div className="result-heading">
+        <Trophy size={22} />
+        <div>
+          <strong>{result.outcome === "win" ? "Victory!" : "Defeat"}</strong>
+          <span>{result.winner.name} wins in {result.turns} turns.</span>
+        </div>
+      </div>
+      <div className="result-stats">
+        <span><strong>+{result.xpGained}</strong> {isTraining ? "Training XP" : "XP"}</span>
+        <span><strong>Lv {result.winner.level}</strong> {result.winner.affinity}</span>
+      </div>
+      <div className="result-xp-card">
+        <div className="result-xp-track">
+          <span style={{ "--xp-width": `${xpPercent}%` } as React.CSSProperties} />
+        </div>
+        <small>{result.winner.xp}/{xpForNextLevel(result.winner.level)} XP to next level</small>
+      </div>
+      {result.levelUp ? (
+        <div className="level-up-card">
+          <strong>Level up!</strong>
+          <span>Lv {result.levelUp.oldLevel} to Lv {result.levelUp.newLevel}</span>
+          <small>HP +{levelGain * 5} / ATK +{levelGain * 2} / DEF +{levelGain * 2} / SPD +{levelGain * 2}</small>
+        </div>
+      ) : (
+        <div className="level-up-card level-up-card-muted">
+          <strong>Next level</strong>
+          <span>{result.winner.xp}/{xpForNextLevel(result.winner.level)} XP</span>
+        </div>
+      )}
+      <div className="result-recap">
+        <span><strong>{result.recap.totalDamage}</strong> damage</span>
+        <span><strong>{result.recap.biggestHit}</strong> biggest hit</span>
+        <span><strong>{result.recap.favoriteMove}</strong> favorite move</span>
+      </div>
+      {result.outcome === "win" ? <ShareStrip payload={buildResultSharePayload(result, battleMode)} status={shareStatus} onMore={onShare} /> : null}
+      {result.newBadges.length ? (
+        <div className="new-badges">
+          <strong>New badges</strong>
+          <div>
+            {result.newBadges.map((badge) => (
+              <span className="badge-chip" key={badge.badgeKey}>{badge.label}</span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="result-actions">
+        <button className="dashboard-return-button" onClick={onBack} type="button">
+          <Flag size={18} />
+          <span>
+            <strong>Dashboard</strong>
+            <small>Return to roster</small>
+          </span>
+        </button>
+        <button disabled={!battleId || rematchBusy} onClick={onRematch} type="button">
+          {rematchBusy ? <LoaderCircle className="spinner" size={18} /> : <RotateCcw size={18} />}
+          <span>
+            <strong>{isTraining ? "Challenge again" : "Rematch"}</strong>
+            <small>{isTraining ? rematchStatus || "Same master" : rematchCode || rematchStatus || (battleId ? "Create code" : "Online only")}</small>
+          </span>
+        </button>
+        <button onClick={onShare} type="button">
+          <Copy size={18} />
+          <span>
+            <strong>{result.outcome === "win" ? "Copy" : "Share"}</strong>
+            <small>{shareStatus || "Copy result"}</small>
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ShareStrip({ onMore, payload, status }: { onMore: () => void; payload: SharePayload; status: string }) {
+  return (
+    <div className="share-strip" aria-label="Share this win">
+      <strong>Tell the arena</strong>
+      <div>
+        <ShareAnchor icon={<Send size={14} />} label="X" payload={payload} platform="x" />
+        <ShareAnchor icon={<MessageCircle size={14} />} label="WhatsApp" payload={payload} platform="whatsapp" />
+        <ShareAnchor icon={<Link2 size={14} />} label="LinkedIn" payload={payload} platform="linkedin" />
+        <ShareAnchor icon={<strong aria-hidden="true">f</strong>} label="Facebook" payload={payload} platform="facebook" />
+        <button className="share-chip" onClick={onMore} type="button">
+          <Share2 size={14} />
+          <span>{status || "More"}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ShareAnchor({ icon, label, payload, platform }: { icon: React.ReactNode; label: string; payload: SharePayload; platform: SharePlatform }) {
+  return (
+    <a className="share-chip" href={buildShareLink(platform, payload)} rel="noreferrer" target="_blank">
+      {icon}
+      <span>{label}</span>
+    </a>
+  );
+}
+
+function buildResultSharePayload(result: ResultSummary, battleMode: "pvp" | "npc"): SharePayload {
+  const modeCopy = battleMode === "npc" ? "just humbled a Master" : "just won an arena fight";
+  const levelCopy = result.levelUp ? ` and leveled up to Lv ${result.levelUp.newLevel}` : "";
+  return {
+    title: "Codex Pet Arena win",
+    text: `${result.winner.name}, my Codex pet, ${modeCopy}${levelCopy}. Tiny sprite, big attitude. Come hatch one and fight me.`,
+    url: getClientShareUrl("/")
+  };
+}
+
 function getTurnCopy({
   battleId,
+  battleMode,
   displayState,
   isClosed,
   isPlayerTurn,
@@ -272,6 +547,7 @@ function getTurnCopy({
   status
 }: {
   battleId?: string;
+  battleMode: "pvp" | "npc";
   displayState: BattleState;
   isClosed: boolean;
   isPlayerTurn: boolean;
@@ -299,9 +575,9 @@ function getTurnCopy({
 
   if (isResolving) {
     return {
-      title: "Resolving",
-      detail: "The arena is applying the last action.",
-      logLine: status,
+      title: battleMode === "npc" ? "Master responds" : "Resolving",
+      detail: battleMode === "npc" ? `${displayState.opponent.name} is choosing a counter.` : "The arena is applying the last action.",
+      logLine: battleMode === "npc" ? `${displayState.opponent.name} prepares a counter.` : status,
       tone: "resolving" as const
     };
   }
@@ -317,7 +593,7 @@ function getTurnCopy({
 
   if (isPlayerTurn) {
     return {
-      title: "Your turn",
+      title: battleMode === "npc" ? "Your training turn" : "Your turn",
       detail: `Choose an action for ${displayState.player.name}.`,
       logLine: `Your turn: choose an action for ${displayState.player.name}.`,
       tone: "ready" as const
@@ -325,11 +601,23 @@ function getTurnCopy({
   }
 
   return {
-    title: `${displayState.opponent.name}'s turn`,
-    detail: "Waiting for the opponent to choose.",
-    logLine: `${displayState.opponent.name}'s turn. Waiting for opponent.`,
+    title: battleMode === "npc" ? "Master turn" : `${displayState.opponent.name}'s turn`,
+    detail: battleMode === "npc" ? `${displayState.opponent.name} is choosing a counter.` : "Waiting for the opponent to choose.",
+    logLine: battleMode === "npc" ? `${displayState.opponent.name} studies the arena.` : `${displayState.opponent.name}'s turn. Waiting for opponent.`,
     tone: "waiting" as const
   };
+}
+
+function MatchIntro({ battleMode, opponent, player }: { battleMode: "pvp" | "npc"; opponent: string; player: string }) {
+  return (
+    <div className="match-intro" aria-hidden="true">
+      {battleMode === "npc" ? <span>Master Challenge</span> : null}
+      <strong>{opponent}</strong>
+      <span>challenges</span>
+      <strong>{player}</strong>
+      <em>Ready... Fight!</em>
+    </div>
+  );
 }
 
 function renderBattleText(text: string, displayState: BattleState) {
@@ -350,6 +638,68 @@ function renderBattleText(text: string, displayState: BattleState) {
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildResultSummary(displayState: BattleState, displayEvents: TurnEvent[]): ResultSummary {
+  const winnerSide = displayState.winner ?? "player";
+  const xpEvent = [...displayEvents].reverse().find((event) => event.kind === "xp" && event.target === winnerSide);
+  const levelUp = [...displayEvents].reverse().find((event) => event.kind === "level-up" && event.target === winnerSide);
+  const loserSide = swapSide(winnerSide);
+  const damageEvents = displayEvents.filter((event): event is Extract<TurnEvent, { kind: "damage" }> => event.kind === "damage" && event.target === loserSide);
+  const usedMoves = new Map<string, number>();
+  const winnerName = getPetName(displayState, winnerSide);
+  for (const event of displayEvents) {
+    if (event.kind !== "message") continue;
+    const match = event.text.match(new RegExp(`^${escapeRegex(winnerName)} used (.+)\\.$`));
+    if (match?.[1]) usedMoves.set(match[1], (usedMoves.get(match[1]) ?? 0) + 1);
+  }
+  const favoriteMove = [...usedMoves.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Guard";
+  const newBadges = displayEvents
+    .filter((event): event is Extract<TurnEvent, { kind: "badge" }> => event.kind === "badge" && event.target === winnerSide)
+    .map((event) => ({ badgeKey: event.badgeKey, label: event.label, title: event.title }));
+
+  return {
+    outcome: winnerSide === "player" ? "win" : "loss",
+    winner: winnerSide === "player" ? displayState.player : displayState.opponent,
+    xpGained: xpEvent?.kind === "xp" ? xpEvent.amount : 0,
+    levelUp: levelUp?.kind === "level-up" ? { oldLevel: levelUp.oldLevel, newLevel: levelUp.newLevel } : undefined,
+    newBadges,
+    recap: {
+      totalDamage: damageEvents.reduce((total, event) => total + event.amount, 0),
+      biggestHit: damageEvents.reduce((max, event) => Math.max(max, event.amount), 0),
+      favoriteMove
+    },
+    turns: displayState.turn
+  };
+}
+
+function getDisplayEvents(events: TurnEvent[], mySide: BattleSide) {
+  if (mySide === "player") return events;
+  return events.map((event) => {
+    if ("target" in event) return { ...event, target: swapSide(event.target) } as TurnEvent;
+    if (event.kind === "winner") return { ...event, winner: swapSide(event.winner) };
+    return event;
+  });
+}
+
+function PixelConfetti() {
+  return (
+    <div className="pixel-confetti" aria-hidden="true">
+      {Array.from({ length: 22 }, (_, index) => (
+        <span key={index} style={{ "--confetti-index": index } as React.CSSProperties} />
+      ))}
+    </div>
+  );
+}
+
+function LevelUpConfetti() {
+  return (
+    <div className="level-up-confetti" aria-hidden="true">
+      {Array.from({ length: 18 }, (_, index) => (
+        <span key={index} style={{ "--level-confetti-index": index } as React.CSSProperties} />
+      ))}
+    </div>
+  );
 }
 
 function BattleLoading({ status }: { status: string }) {

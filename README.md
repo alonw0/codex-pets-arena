@@ -26,9 +26,13 @@ The battle UI is inspired by classic handheld monster fights, but uses original 
 - Dashboard roster with cached local state and background refresh.
 - Random matchmaking.
 - Friend-code lobbies.
+- PvE Master challenges with curated NPC opponents and reduced training XP.
+- Rematch codes after completed fights.
 - Realtime battle updates through Supabase Realtime with polling fallback.
+- Cached arena counters for total pets, registered trainers, and recently online trainers.
 - Server-authoritative turn resolution.
 - XP, levels, wins/losses, match completion, and battle reconnect support.
+- Profile badges, match intro, animated XP results, and post-fight recap.
 - Demo fight at `/battle/demo` that works without Supabase.
 
 ## Battle Rules
@@ -86,12 +90,14 @@ Set these in `.env.local`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=...
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-2.5-flash
 ```
 
 `GEMINI_API_KEY` is optional. If it is missing, pet creation still works with fallback moves.
+`NEXT_PUBLIC_SITE_URL` should be your production Vercel URL in production so social share cards and invite links use the right domain.
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` or `GEMINI_API_KEY` in client-side code.
 

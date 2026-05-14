@@ -19,7 +19,16 @@ export function xpForNextLevel(level: number): number {
 
 export function applyBattleProgression(winner: BattlePet, defeated: BattlePet): ProgressionResult {
   const oldLevel = winner.level;
-  const xpGained = xpForDefeat(winner, defeated);
+  return applyBattleProgressionWithXp(winner, xpForDefeat(winner, defeated), oldLevel);
+}
+
+export function applyBattleProgressionWithMultiplier(winner: BattlePet, defeated: BattlePet, multiplier: number): ProgressionResult {
+  const oldLevel = winner.level;
+  const xpGained = Math.max(0, Math.floor(xpForDefeat(winner, defeated) * multiplier));
+  return applyBattleProgressionWithXp(winner, xpGained, oldLevel);
+}
+
+function applyBattleProgressionWithXp(winner: BattlePet, xpGained: number, oldLevel: number): ProgressionResult {
   winner.xp += xpGained;
 
   let leveledUp = false;

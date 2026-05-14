@@ -2,6 +2,28 @@ import type { Affinity, BattleMove, MoveCategory } from "./types";
 
 const AFFINITIES: Affinity[] = ["spark", "leaf", "ember", "aqua", "stone", "glitch"];
 const CATEGORIES: MoveCategory[] = ["physical", "special"];
+const FALLBACK_MOVE_BANK: PersonalMoveRecord[] = [
+  fallbackMove("Quick Pounce", "physical", "spark", 23, 96, 26),
+  fallbackMove("Boot Feint", "physical", "stone", 21, 98, 28),
+  fallbackMove("Shoulder Check", "physical", "stone", 27, 90, 22),
+  fallbackMove("Pocket Jab", "physical", "glitch", 20, 100, 30),
+  fallbackMove("Dash Tackle", "physical", "spark", 25, 92, 24),
+  fallbackMove("Leafy Trip", "physical", "leaf", 22, 95, 26),
+  fallbackMove("Ember Shove", "physical", "ember", 26, 90, 22),
+  fallbackMove("Tide Sweep", "physical", "aqua", 24, 93, 24),
+  fallbackMove("Stone Bump", "physical", "stone", 28, 88, 20),
+  fallbackMove("Glitch Nudge", "physical", "glitch", 23, 94, 25),
+  fallbackMove("Bright Flicker", "special", "spark", 27, 90, 18),
+  fallbackMove("Soft Static", "special", "spark", 25, 94, 20),
+  fallbackMove("Vine Wink", "special", "leaf", 26, 91, 18),
+  fallbackMove("Petal Daze", "special", "leaf", 29, 86, 16),
+  fallbackMove("Tiny Flare", "special", "ember", 30, 84, 16),
+  fallbackMove("Hot Glare", "special", "ember", 28, 88, 18),
+  fallbackMove("Bubble Riddle", "special", "aqua", 27, 90, 18),
+  fallbackMove("Mirror Drop", "special", "aqua", 31, 82, 14),
+  fallbackMove("Pebble Echo", "special", "stone", 29, 86, 16),
+  fallbackMove("Pixel Hex", "special", "glitch", 32, 80, 14)
+];
 
 export type PersonalMoveInput = {
   name: string;
@@ -63,32 +85,12 @@ Quality bar:
 
 export function fallbackPersonalMoves(input: PersonalMoveInput): PersonalMoveRecord[] {
   const seed = hashString(`${input.name}:${input.description}`);
-  const words = meaningfulWords(`${input.name} ${input.description}`);
-  const first = titleMove([words[0] ?? input.name, "Strike"]);
-  const second = titleMove([words[1] ?? "Signature", words[2] ?? "Burst"]);
+  const physicalMoves = FALLBACK_MOVE_BANK.filter((move) => move.category === "physical");
+  const specialMoves = FALLBACK_MOVE_BANK.filter((move) => move.category === "special");
+  const physical = physicalMoves[seed % physicalMoves.length];
+  const special = specialMoves[Math.floor(seed / physicalMoves.length) % specialMoves.length];
 
-  return [
-    {
-      display_name: first,
-      move_key: slugify(first),
-      power: 19 + (seed % 9),
-      accuracy: 92,
-      category: "physical",
-      affinity: AFFINITIES[seed % AFFINITIES.length],
-      max_charges: 24,
-      effect: null
-    },
-    {
-      display_name: second,
-      move_key: slugify(second),
-      power: 24 + (seed % 9),
-      accuracy: 88,
-      category: "special",
-      affinity: AFFINITIES[Math.floor(seed / 7) % AFFINITIES.length],
-      max_charges: 18,
-      effect: null
-    }
-  ];
+  return [physical, special].map((move) => ({ ...move }));
 }
 
 export function normalizePersonalMoves(rawMoves: unknown, input: PersonalMoveInput): PersonalMoveRecord[] {
@@ -132,18 +134,24 @@ export function personalMoveRecordToBattleMove(move: PersonalMoveRecord): Battle
   };
 }
 
-function meaningfulWords(value: string): string[] {
-  const blocked = new Set(["the", "and", "with", "from", "that", "this", "wife", "pet", "codex", "inspired"]);
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .split(/\s+/)
-    .filter((word) => word.length > 2 && !blocked.has(word))
-    .slice(0, 8);
-}
-
-function titleMove(words: string[]): string {
-  return sanitizeMoveName(words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "));
+function fallbackMove(
+  displayName: string,
+  category: MoveCategory,
+  affinity: Affinity,
+  power: number,
+  accuracy: number,
+  maxCharges: number
+): PersonalMoveRecord {
+  return {
+    display_name: displayName,
+    move_key: slugify(displayName),
+    power,
+    accuracy,
+    category,
+    affinity,
+    max_charges: maxCharges,
+    effect: null
+  };
 }
 
 function sanitizeMoveName(value: string): string {

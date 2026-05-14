@@ -11,5 +11,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (battle.player_id !== user.id && battle.opponent_id !== user.id) return NextResponse.json({ error: "Not a battle participant." }, { status: 403 });
 
   const { data: events } = await supabase.from("battle_events").select("*").eq("battle_id", id).order("id", { ascending: true });
-  return NextResponse.json({ battle, events: events ?? [], side: battle.player_id === user.id ? "player" : "opponent" });
+  return NextResponse.json({
+    battle,
+    events: events ?? [],
+    side: battle.player_id === user.id ? "player" : "opponent",
+    mode: battle.mode ?? "pvp",
+    npcMasterKey: battle.npc_master_key ?? null
+  });
 }

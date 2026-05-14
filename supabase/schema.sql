@@ -9,6 +9,7 @@ create table public.profiles (
   rating integer not null default 1000,
   wins integer not null default 0,
   losses integer not null default 0,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -87,9 +88,11 @@ create table public.lobbies (
 create table public.battles (
   id uuid primary key default gen_random_uuid(),
   player_id uuid not null references public.profiles(id) on delete cascade,
-  opponent_id uuid not null references public.profiles(id) on delete cascade,
+  opponent_id uuid references public.profiles(id) on delete cascade,
   player_pet_id uuid not null references public.pets(id) on delete restrict,
-  opponent_pet_id uuid not null references public.pets(id) on delete restrict,
+  opponent_pet_id uuid references public.pets(id) on delete restrict,
+  mode text not null default 'pvp' check (mode in ('pvp', 'npc')),
+  npc_master_key text,
   current_turn integer not null default 1,
   state jsonb not null,
   status public.battle_status not null default 'active',
@@ -120,6 +123,15 @@ create table public.battle_events (
   created_at timestamptz not null default now()
 );
 
+create table public.profile_badges (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  badge_key text not null,
+  metadata jsonb not null default '{}',
+  earned_at timestamptz not null default now(),
+  unique (profile_id, badge_key)
+);
+
 alter table public.profiles enable row level security;
 alter table public.pets enable row level security;
 alter table public.moves enable row level security;
@@ -128,6 +140,7 @@ alter table public.lobbies enable row level security;
 alter table public.battles enable row level security;
 alter table public.battle_turns enable row level security;
 alter table public.battle_events enable row level security;
+alter table public.profile_badges enable row level security;
 
 create policy "profiles readable" on public.profiles for select using (true);
 create policy "profiles self insert" on public.profiles for insert with check (auth.uid() = id);
@@ -143,7 +156,7 @@ create policy "queue self read" on public.match_queue for select using (auth.uid
 
 create policy "lobbies participants read" on public.lobbies for select using (auth.uid() in (host_id, guest_id));
 
-create policy "battles participants read" on public.battles for select using (auth.uid() in (player_id, opponent_id));
+create policy "battles participants read" on public.battles for select using (auth.uid() = player_id or auth.uid() = opponent_id);
 
 create policy "turns participants read" on public.battle_turns for select using (
   exists (select 1 from public.battles where battles.id = battle_turns.battle_id and auth.uid() in (battles.player_id, battles.opponent_id))
@@ -152,6 +165,8 @@ create policy "turns participants read" on public.battle_turns for select using 
 create policy "events participants read" on public.battle_events for select using (
   exists (select 1 from public.battles where battles.id = battle_events.battle_id and auth.uid() in (battles.player_id, battles.opponent_id))
 );
+
+create policy "profile badges self read" on public.profile_badges for select using (auth.uid() = profile_id);
 
 insert into storage.buckets (id, name, public)
 values ('pet-assets', 'pet-assets', true)
@@ -162,3 +177,9 @@ create policy "pet assets owner upload" on storage.objects for insert with check
 );
 
 create policy "pet assets public read" on storage.objects for select using (bucket_id = 'pet-assets');
+
+create index if not exists profiles_last_seen_at_idx on public.profiles (last_seen_at desc);
+create index if not exists pets_valid_active_idx on public.pets (validation_status, active);
+create index if not exists battles_status_idx on public.battles (status);
+create index if not exists battles_mode_idx on public.battles (mode);
+create index if not exists match_queue_status_idx on public.match_queue (status);

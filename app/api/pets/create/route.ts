@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createBattlePet } from "@/lib/battle/engine";
 import { buildPersonalMovePrompt, fallbackPersonalMoves, normalizePersonalMoves } from "@/lib/battle/personalMoves";
+import { awardPetUploadBadges } from "@/lib/battle/badges";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
 
 const MAX_FILE_BYTES = 6 * 1024 * 1024;
@@ -78,6 +79,8 @@ export async function POST(request: Request) {
 
   if (movesError) return NextResponse.json({ error: movesError.message }, { status: 500 });
 
+  const badges = await awardPetUploadBadges(supabase, user.id);
+
   return NextResponse.json({
     pet: {
       id: petId,
@@ -85,7 +88,8 @@ export async function POST(request: Request) {
       description,
       affinity: battlePet.affinity,
       level: battlePet.level,
-      moves: generatedMoves
+      moves: generatedMoves,
+      badges
     }
   });
 }

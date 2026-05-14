@@ -9,6 +9,8 @@ describe("personal moves", () => {
     expect(first).toEqual(second);
     expect(first).toHaveLength(2);
     expect(first[0].display_name).toBeTruthy();
+    expect(first[0].category).toBe("physical");
+    expect(first[1].category).toBe("special");
   });
 
   it("normalizes unsafe generated move fields", () => {

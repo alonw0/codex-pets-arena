@@ -84,6 +84,7 @@ export type TurnEvent =
   | { kind: "faint"; target: BattleSide }
   | { kind: "xp"; target: BattleSide; amount: number; xp: number; nextLevelXp: number }
   | { kind: "level-up"; target: BattleSide; oldLevel: number; newLevel: number }
+  | { kind: "badge"; target: BattleSide; badgeKey: string; label: string; title: string }
   | { kind: "winner"; winner: BattleSide };
 
 export type ResolvedTurn = {
