@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createLobbyCode } from "@/lib/security/lobbyCodes";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -51,8 +52,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (lobbyError || !lobby) return NextResponse.json({ error: lobbyError?.message ?? "Could not create rematch lobby." }, { status: 500 });
   return NextResponse.json({ lobby });
-}
-
-function createLobbyCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
 }

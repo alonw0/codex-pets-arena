@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import type { User } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { normalizePetName } from "@/lib/pets/text";
 
 export async function createSupabaseCookieClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -64,12 +65,14 @@ export async function ensureProfile(
   supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
   user: User
 ) {
-  const displayName =
+  const displayName = normalizePetName(
     typeof user.user_metadata?.display_name === "string"
       ? user.user_metadata.display_name
       : typeof user.email === "string"
         ? user.email.split("@")[0]
-        : "Trainer";
+        : "Trainer",
+    "Trainer"
+  );
 
   const { error } = await supabase.from("profiles").upsert(
     {

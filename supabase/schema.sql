@@ -4,7 +4,7 @@ create type public.lobby_status as enum ('open', 'active', 'expired', 'closed');
 
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null default 'Trainer',
+  display_name text not null default 'Trainer' check (char_length(display_name) between 1 and 40),
   avatar_url text,
   rating integer not null default 1000,
   wins integer not null default 0,
@@ -23,7 +23,7 @@ begin
   insert into public.profiles (id, display_name)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1), 'Trainer')
+    left(coalesce(nullif(new.raw_user_meta_data ->> 'display_name', ''), split_part(new.email, '@', 1), 'Trainer'), 40)
   )
   on conflict (id) do nothing;
   return new;
@@ -35,13 +35,45 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
+create or replace function public.increment_profile_result(target_profile_id uuid, result_column text)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  next_value integer;
+begin
+  if result_column = 'wins' then
+    update public.profiles
+    set wins = wins + 1
+    where id = target_profile_id
+    returning wins into next_value;
+  elsif result_column = 'losses' then
+    update public.profiles
+    set losses = losses + 1
+    where id = target_profile_id
+    returning losses into next_value;
+  else
+    raise exception 'Unsupported profile result column: %', result_column;
+  end if;
+
+  if next_value is null then
+    raise exception 'Profile % not found', target_profile_id;
+  end if;
+
+  return next_value;
+end;
+$$;
+
 create table public.pets (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references public.profiles(id) on delete cascade,
-  name text not null,
-  description text not null default '',
+  name text not null check (char_length(name) between 1 and 64),
+  description text not null default '' check (char_length(description) <= 512),
   manifest_path text not null,
   spritesheet_path text not null,
+  thumbnail_path text,
   affinity text not null,
   level integer not null default 1,
   xp integer not null default 0,
@@ -144,7 +176,24 @@ alter table public.profile_badges enable row level security;
 
 create policy "profiles readable" on public.profiles for select using (true);
 create policy "profiles self insert" on public.profiles for insert with check (auth.uid() = id);
-create policy "profiles self update" on public.profiles for update using (auth.uid() = id);
+revoke insert, update, delete, truncate, references, trigger on public.profiles from anon;
+revoke insert, update, delete, truncate, references, trigger on public.profiles from authenticated;
+grant select on public.profiles to anon;
+grant select on public.profiles to authenticated;
+grant update (display_name, avatar_url) on public.profiles to authenticated;
+create policy "profiles self update" on public.profiles
+  for update
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and char_length(display_name) between 1 and 40
+    and (avatar_url is null or char_length(avatar_url) <= 512)
+  );
+
+revoke all on function public.increment_profile_result(uuid, text) from public;
+revoke all on function public.increment_profile_result(uuid, text) from anon;
+revoke all on function public.increment_profile_result(uuid, text) from authenticated;
+grant execute on function public.increment_profile_result(uuid, text) to service_role;
 
 create policy "pets readable" on public.pets for select using (validation_status = 'valid' or auth.uid() = owner_id);
 

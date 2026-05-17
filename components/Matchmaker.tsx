@@ -13,6 +13,8 @@ export type RosterPet = {
   level: number;
   xp: number;
   affinity: string;
+  thumbnail_path?: string | null;
+  thumbnail_url?: string | null;
   moves?: RosterMove[];
 };
 

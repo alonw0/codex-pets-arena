@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createLobbyCode } from "@/lib/security/lobbyCodes";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -34,8 +35,4 @@ export async function POST(request: Request) {
 
   if (lobbyError || !data) return NextResponse.json({ error: lobbyError?.message ?? "Could not create lobby." }, { status: 500 });
   return NextResponse.json({ lobby: data });
-}
-
-function createLobbyCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
 }

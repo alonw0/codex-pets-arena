@@ -70,10 +70,10 @@ export function DashboardClient() {
 
         const [{ data: profileData }, { data: petData }, { data: badgeData }] = await Promise.all([
           supabase!.from("profiles").select("id, rating, wins, losses").eq("id", user.id).maybeSingle<Profile>(),
-          supabase!.from("pets").select("id, name, level, xp, affinity").eq("owner_id", user.id).eq("active", true).returns<RosterPet[]>(),
+          supabase!.from("pets").select("id, name, level, xp, affinity, thumbnail_path").eq("owner_id", user.id).eq("active", true).returns<RosterPet[]>(),
           supabase!.from("profile_badges").select("badge_key, earned_at").eq("profile_id", user.id).order("earned_at", { ascending: false })
         ]);
-        const loadedPets = petData ?? [];
+        const loadedPets = addThumbnailUrls(supabase!, petData ?? []);
         const petIds = loadedPets.map((pet) => pet.id);
         const { data: moveData } = petIds.length
           ? await supabase!
@@ -112,6 +112,18 @@ export function DashboardClient() {
         const token = sessionResult.data.session?.access_token;
         if (token) {
           void loadActiveBattle(token).then(setActiveBattleId).catch(() => setActiveBattleId(null));
+          if (petsWithMoves.some((pet) => !pet.thumbnail_path)) {
+            void backfillThumbnails(token, supabase!, petsWithMoves, (nextPets) => {
+              setPets(nextPets);
+              writeDashboardCache(user.id, {
+                profile: loadedProfile,
+                pets: nextPets,
+                badges: loadedBadges,
+                selectedPetId: selectedPetIdRef.current || nextSelectedPetId,
+                cachedAt: Date.now()
+              });
+            });
+          }
         }
         void loadArenaStats().then(setArenaStats).catch(() => setArenaStats(null));
       } catch (error) {
@@ -190,7 +202,11 @@ export function DashboardClient() {
                   setSelectedPetId(pet.id);
                 }} type="button">
                   <div className="roster-card-main">
-                    <div>
+                    <div className="roster-thumb" aria-hidden="true">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {pet.thumbnail_url ? <img alt="" src={pet.thumbnail_url} /> : <span>{pet.name.slice(0, 1).toUpperCase()}</span>}
+                    </div>
+                    <div className="roster-card-name">
                       <strong>{pet.name}</strong>
                       <span>{pet.affinity}</span>
                     </div>
@@ -243,6 +259,39 @@ async function loadArenaStats() {
   const response = await fetch("/api/arena/stats");
   if (!response.ok) throw new Error("Could not load arena stats.");
   return response.json() as Promise<ArenaStats>;
+}
+
+async function backfillThumbnails(
+  token: string,
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+  currentPets: RosterPet[],
+  onUpdated: (pets: RosterPet[]) => void
+) {
+  const response = await fetch("/api/pets/backfill-thumbnails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) return;
+  const payload = (await response.json()) as { updated?: Array<{ id: string; thumbnail_path: string }> };
+  if (!payload.updated?.length) return;
+
+  const thumbnailByPet = new Map(payload.updated.map((pet) => [pet.id, pet.thumbnail_path]));
+  onUpdated(currentPets.map((pet) => {
+    const thumbnailPath = thumbnailByPet.get(pet.id);
+    if (!thumbnailPath) return pet;
+    return {
+      ...pet,
+      thumbnail_path: thumbnailPath,
+      thumbnail_url: supabase.storage.from("pet-assets").getPublicUrl(thumbnailPath).data.publicUrl
+    };
+  }));
+}
+
+function addThumbnailUrls(supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>, pets: RosterPet[]) {
+  return pets.map((pet) => ({
+    ...pet,
+    thumbnail_url: pet.thumbnail_path ? supabase.storage.from("pet-assets").getPublicUrl(pet.thumbnail_path).data.publicUrl : null
+  }));
 }
 
 function formatCount(value: number) {

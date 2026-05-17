@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertUuid } from "@/lib/security/ids";
 
 export const STALE_ACTIVE_BATTLE_MINUTES = 30;
 
@@ -15,10 +16,11 @@ export async function abandonUserActiveBattles(
   userId: string,
   reason = "A trainer left the fight."
 ) {
+  const safeUserId = assertUuid(userId);
   const { data: battles, error } = await supabase
     .from("battles")
     .select("id, player_id, opponent_id, updated_at, state")
-    .or(`player_id.eq.${userId},opponent_id.eq.${userId}`)
+    .or(`player_id.eq.${safeUserId},opponent_id.eq.${safeUserId}`)
     .eq("status", "active")
     .returns<BattleParticipantRow[]>();
 

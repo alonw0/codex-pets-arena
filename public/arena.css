@@ -80,6 +80,7 @@ code {
 }
 
 .top-nav a,
+.top-nav button,
 .room-pill {
   align-items: center;
   display: inline-flex;
@@ -142,6 +143,26 @@ code {
   color: var(--ink);
 }
 
+.nav-auth-button {
+  background: #edf5ff;
+  border: 3px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-weight: 900;
+  min-height: 38px;
+  padding: 7px 12px;
+  text-decoration: none;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.top-nav button.nav-auth-button {
+  box-shadow: none;
+}
+
+.nav-auth-button-danger {
+  background: #fff0ed;
+}
+
 .compact {
   min-height: 36px;
   padding: 6px 10px;
@@ -154,6 +175,63 @@ code {
 .move-grid button:active {
   box-shadow: 0 2px 0 var(--line);
   transform: translateY(3px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .primary-button:hover,
+  .secondary-button:hover,
+  .nav-cta:hover,
+  .nav-auth-button:hover,
+  .top-nav button.nav-auth-button:hover {
+    box-shadow: 0 7px 0 var(--line);
+    transform: translateY(-2px);
+  }
+
+  .primary-button:hover {
+    background: #ffd25a;
+  }
+
+  .secondary-button:hover,
+  .nav-cta:hover {
+    background: #fffaf0;
+  }
+
+  .nav-auth-button:hover {
+    background: #dceeff;
+  }
+
+  .nav-auth-button-danger:hover {
+    background: #ffe3dd;
+  }
+
+  .match-card-button:not(:disabled):hover,
+  .match-card:focus-within {
+    background: #fff6df;
+    box-shadow: 0 6px 0 rgba(23, 21, 31, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .master-card:not(:disabled):hover,
+  .roster-row:hover {
+    filter: saturate(1.08);
+    box-shadow: 0 7px 0 rgba(23, 21, 31, 0.24);
+    transform: translateY(-2px);
+  }
+
+  .command-grid button:not(:disabled):hover {
+    background: #fff4dd;
+    box-shadow: 0 6px 0 var(--line);
+    transform: translateY(-2px);
+  }
+
+  .dashboard-return-button:not(:disabled):hover {
+    background: #ffd25a !important;
+  }
+
+  .share-chip:hover {
+    background: #dceeff;
+    transform: translateY(-1px);
+  }
 }
 
 .hero-arena {
@@ -474,6 +552,7 @@ select {
   min-height: 170px;
   min-width: 0;
   padding: 16px;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .match-card .compact,
@@ -518,6 +597,7 @@ select {
   min-height: 112px;
   padding: 12px;
   text-align: left;
+  transition: filter 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .master-card:disabled {
@@ -621,6 +701,7 @@ select {
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
+  transition: background-color 140ms ease, transform 140ms ease;
 }
 
 .share-strip .share-chip {
@@ -732,6 +813,7 @@ select {
   min-height: 92px;
   padding: 12px;
   text-align: left;
+  transition: filter 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .roster-row-active {
@@ -746,15 +828,44 @@ select {
 }
 
 .roster-card-main {
+  align-items: center;
   display: grid;
   gap: 8px;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
 }
 
-.roster-card-main > div:first-child {
+.roster-card-name {
   align-items: start;
   display: flex;
   gap: 10px;
   justify-content: space-between;
+}
+
+.roster-thumb {
+  align-items: center;
+  align-self: start;
+  background: #edf5ff;
+  border: 3px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  height: 58px;
+  justify-content: center;
+  overflow: hidden;
+  width: 56px;
+}
+
+.roster-thumb img {
+  display: block;
+  height: 52px;
+  image-rendering: pixelated;
+  object-fit: contain;
+  width: 48px;
+}
+
+.roster-thumb span {
+  color: var(--ink);
+  font-size: 1.3rem;
+  font-weight: 900;
 }
 
 .level-badge {
@@ -771,6 +882,7 @@ select {
 .roster-xp {
   display: grid;
   gap: 4px;
+  grid-column: 2 / -1;
 }
 
 .roster-xp-track {
@@ -800,6 +912,10 @@ select {
   flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.pet-title-slots {
+  grid-column: 2 / -1;
 }
 
 .move-chip {
@@ -1408,6 +1524,7 @@ select {
   min-height: 58px;
   padding: 8px 12px;
   text-align: left;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .command-grid button:disabled {

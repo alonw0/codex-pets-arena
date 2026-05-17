@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBearerUser } from "@/lib/supabase/server";
 
 const MAX_SPRITESHEET_BYTES = 5 * 1024 * 1024;
 
 export async function GET(request: NextRequest) {
+  const { user, error } = await getBearerUser(request);
+  if (!user) return NextResponse.json({ error }, { status: 401 });
+
   const remoteUrl = request.nextUrl.searchParams.get("url");
   if (!remoteUrl) {
     return NextResponse.json({ error: "Missing spritesheet URL." }, { status: 400 });

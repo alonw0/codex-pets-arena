@@ -46,6 +46,14 @@
   - [x] Waiting/ready states
   - [x] Basic reconnect restoration
   - [x] Rematch flow
+- [ ] Security hardening pass
+  - [x] Lock down direct `profiles` stat writes
+  - [x] Replace read/write win-loss counters with atomic RPC increments
+  - [x] Cap uploaded pet name/description before DB insert and Gemini prompt
+  - [x] Replace `Math.random()` lobby codes with crypto-secure codes
+  - [x] Require auth for Codex Pets import/proxy endpoints
+  - [x] Add baseline security headers
+  - [ ] Track rate limiting as follow-up infrastructure work
 
 ## Backlog
 

@@ -60,9 +60,14 @@ export function PetUploader() {
     setResult(null);
 
     try {
+      const supabase = createSupabaseBrowserClient();
+      if (!supabase) throw new Error("Supabase env vars are missing. Import requires auth.");
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session?.access_token) throw new Error("Log in before importing a Codex pet.");
+
       const metadataResponse = await fetch("/api/codex-pets/import", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ url: importUrl })
       });
       const metadata = (await metadataResponse.json()) as {
@@ -80,7 +85,9 @@ export function PetUploader() {
         throw new Error(metadata.error ?? "Could not import this Codex pet.");
       }
 
-      const spritesheetResponse = await fetch(metadata.pet.spritesheetProxyUrl);
+      const spritesheetResponse = await fetch(metadata.pet.spritesheetProxyUrl, {
+        headers: { authorization: `Bearer ${session.access_token}` }
+      });
       if (!spritesheetResponse.ok) {
         throw new Error("Could not download the Codex pet spritesheet.");
       }

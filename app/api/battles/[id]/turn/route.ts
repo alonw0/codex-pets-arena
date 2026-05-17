@@ -3,8 +3,9 @@ import { awardBattleBadges } from "@/lib/battle/badges";
 import { ensureActiveSide, resolveActiveTurn } from "@/lib/battle/engine";
 import { normalizeBattleAction } from "@/lib/battle/db";
 import { chooseNpcAction, NPC_XP_MULTIPLIER } from "@/lib/battle/masters";
+import { incrementProfileResult } from "@/lib/battle/profileStats";
 import type { BattleAction, BattleState } from "@/lib/battle/types";
-import { createSupabaseServiceClient, getBearerUser } from "@/lib/supabase/server";
+import { getBearerUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { supabase, user, error } = await getBearerUser(request);
@@ -179,16 +180,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   return NextResponse.json({ status: "resolved", state: resolved.state, events: resolved.events, activeSide: resolved.state.activeSide, mode });
-}
-
-async function incrementProfileResult(
-  supabase: NonNullable<ReturnType<typeof createSupabaseServiceClient>>,
-  profileId: string,
-  column: "wins" | "losses"
-) {
-  const { data, error } = await supabase.from("profiles").select(column).eq("id", profileId).maybeSingle<Record<"wins" | "losses", number>>();
-  if (error) return { error, value: null };
-  const current = data?.[column] ?? 0;
-  const { error: updateError } = await supabase.from("profiles").update({ [column]: current + 1 }).eq("id", profileId);
-  return { error: updateError, value: current + 1 };
 }

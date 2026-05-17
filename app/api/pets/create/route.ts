@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { createBattlePet } from "@/lib/battle/engine";
 import { buildPersonalMovePrompt, fallbackPersonalMoves, normalizePersonalMoves } from "@/lib/battle/personalMoves";
 import { awardPetUploadBadges } from "@/lib/battle/badges";
+import { descriptionForMovePrompt, normalizePetDescription, normalizePetName } from "@/lib/pets/text";
+import { createPetThumbnail } from "@/lib/pets/thumbnails";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
 
 const MAX_FILE_BYTES = 6 * 1024 * 1024;
 
@@ -36,19 +40,33 @@ export async function POST(request: Request) {
   }
 
   const petId = crypto.randomUUID();
-  const name = manifest.name ?? manifest.displayName ?? manifest.id ?? "Arena Pet";
-  const description = manifest.description ?? "";
+  const name = normalizePetName(manifest.name ?? manifest.displayName ?? manifest.id);
+  const description = normalizePetDescription(manifest.description);
   const basePath = `${user.id}/${petId}`;
   const manifestBytes = await manifestFile.arrayBuffer();
   const spritesheetBytes = await spritesheetFile.arrayBuffer();
+  let thumbnailBytes: Buffer;
+  try {
+    thumbnailBytes = await createPetThumbnail(spritesheetBytes);
+  } catch (thumbnailError) {
+    return NextResponse.json({
+      error: thumbnailError instanceof Error ? thumbnailError.message : "Could not create pet thumbnail."
+    }, { status: 400 });
+  }
 
-  const [manifestUpload, spriteUpload] = await Promise.all([
+  const [manifestUpload, spriteUpload, thumbnailUpload] = await Promise.all([
     supabase.storage.from("pet-assets").upload(`${basePath}/pet.json`, manifestBytes, { contentType: "application/json" }),
-    supabase.storage.from("pet-assets").upload(`${basePath}/spritesheet.webp`, spritesheetBytes, { contentType: "image/webp" })
+    supabase.storage.from("pet-assets").upload(`${basePath}/spritesheet.webp`, spritesheetBytes, { contentType: "image/webp" }),
+    supabase.storage.from("pet-assets").upload(`${basePath}/thumbnail.webp`, thumbnailBytes, {
+      contentType: "image/webp",
+      cacheControl: "31536000"
+    })
   ]);
 
-  if (manifestUpload.error || spriteUpload.error) {
-    return NextResponse.json({ error: manifestUpload.error?.message ?? spriteUpload.error?.message ?? "Upload failed." }, { status: 500 });
+  if (manifestUpload.error || spriteUpload.error || thumbnailUpload.error) {
+    return NextResponse.json({
+      error: manifestUpload.error?.message ?? spriteUpload.error?.message ?? thumbnailUpload.error?.message ?? "Upload failed."
+    }, { status: 500 });
   }
 
   const battlePet = createBattlePet({ id: petId, ownerId: user.id, name });
@@ -59,6 +77,7 @@ export async function POST(request: Request) {
     description,
     manifest_path: `${basePath}/pet.json`,
     spritesheet_path: `${basePath}/spritesheet.webp`,
+    thumbnail_path: `${basePath}/thumbnail.webp`,
     affinity: battlePet.affinity,
     level: battlePet.level,
     xp: 0,
@@ -68,7 +87,7 @@ export async function POST(request: Request) {
 
   if (petError) return NextResponse.json({ error: petError.message }, { status: 500 });
 
-  const generatedMoves = await generateMoves(name, description);
+  const generatedMoves = await generateMoves(name, descriptionForMovePrompt(description));
   const { error: movesError } = await supabase.from("moves").insert(
     generatedMoves.map((move, index) => ({
       pet_id: petId,

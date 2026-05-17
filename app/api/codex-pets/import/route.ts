@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBearerUser } from "@/lib/supabase/server";
 
 type CodexPetsApiResponse = {
   pet?: {
@@ -15,6 +16,9 @@ type CodexPetsApiResponse = {
 };
 
 export async function POST(request: NextRequest) {
+  const { user, error } = await getBearerUser(request);
+  if (!user) return NextResponse.json({ error }, { status: 401 });
+
   let body: { url?: string };
   try {
     body = (await request.json()) as { url?: string };

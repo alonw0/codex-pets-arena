@@ -114,6 +114,22 @@ supabase/npc-masters.sql
 
 That allows `battles` rows to store PvE master challenges where the opponent is not a Supabase auth user. New projects get this from `supabase/schema.sql`.
 
+For an existing project created before pet thumbnails were added, also run:
+
+```text
+supabase/pet-thumbnails.sql
+```
+
+That adds `pets.thumbnail_path`. New uploads create `thumbnail.webp` automatically. Existing pets are backfilled in small batches when their owner opens the dashboard.
+
+For an existing project created before the May 2026 security hardening pass, also run:
+
+```text
+supabase/security-2026-05-profile-stats.sql
+```
+
+That restricts direct browser updates on `profiles` to `display_name`/`avatar_url`, adds length constraints for trainer and pet text, and creates the atomic `increment_profile_result` RPC used by battle completion.
+
 The schema intentionally does not create Postgres extensions. Supabase projects normally provide `gen_random_uuid()` already. If your project does not recognize `gen_random_uuid()`, enable `pgcrypto` from the Supabase dashboard extension UI, then rerun the schema.
 
 If the query fails on the storage policy section, confirm that Supabase Storage is enabled for the project, then run the failed storage statements again.
@@ -219,6 +235,7 @@ The schema creates it as public because pet sprites need to render in battles. U
 ```text
 pet-assets/<user-id>/<pet-id>/pet.json
 pet-assets/<user-id>/<pet-id>/spritesheet.webp
+pet-assets/<user-id>/<pet-id>/thumbnail.webp
 ```
 
 If you prefer private assets later, change the bucket to private and replace direct URLs with signed URLs.

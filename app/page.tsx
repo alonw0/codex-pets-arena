@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Gamepad2, Upload, Users } from "lucide-react";
+import { Gamepad2, LogIn, Upload, Users } from "lucide-react";
 import { BattleArena } from "@/components/BattleArena";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getArenaStats } from "@/lib/arena/stats";
@@ -16,7 +16,7 @@ export default async function HomePage() {
       <nav className="top-nav">
         <BrandLogo />
         <div>
-          {!isLoggedIn ? <Link href="/auth">Login</Link> : null}
+          {!isLoggedIn ? <Link className="nav-auth-button" href="/auth"><LogIn size={16} /> Login</Link> : null}
           <Link className="nav-cta" href="/dashboard">Dashboard</Link>
         </div>
       </nav>

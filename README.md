@@ -22,6 +22,7 @@ The battle UI is inspired by classic handheld monster fights, but uses original 
   - `192x208` cells
   - required rows for `idle`, `running-right`, `running-left`, `waving`, `jumping`, `failed`, `waiting`, `running`, and `review`
 - Server-side pet creation with Supabase Storage persistence.
+- Generated `thumbnail.webp` pet previews so roster/dashboard screens do not load full spritesheets.
 - Two generated personal moves per uploaded pet using Gemini, with deterministic fallback moves when Gemini is unavailable.
 - Dashboard roster with cached local state and background refresh.
 - Random matchmaking.
@@ -115,6 +116,18 @@ For existing projects created before the RLS hardening pass, also run:
 supabase/security-hardening.sql
 ```
 
+For existing projects created before pet thumbnails were added, also run:
+
+```text
+supabase/pet-thumbnails.sql
+```
+
+For existing projects created before the May 2026 security hardening pass, also run:
+
+```text
+supabase/security-2026-05-profile-stats.sql
+```
+
 Enable Realtime for:
 
 ```text
@@ -150,7 +163,7 @@ https://codex-pets.net/#/pets/sable
 app/                  Next.js routes and API handlers
 components/           Client UI and battle components
 lib/battle/           Battle engine, progression, DB transforms
-lib/pets/             Codex atlas constants and validation
+lib/pets/             Codex atlas constants, validation, thumbnails
 lib/supabase/         Browser and server Supabase clients
 supabase/             Database schema and hardening SQL
 tests/                Battle and move generation tests
@@ -170,6 +183,7 @@ npm run start     # run production build locally
 
 - Gameplay writes go through server API routes that use the Supabase service role.
 - Browser RLS policies are read-focused for gameplay tables.
+- Direct browser updates to `profiles` are limited to trainer display fields; wins/losses are updated through a server-only atomic RPC.
 - The service role key is server-only.
 - Pet upload routes require an authenticated bearer token.
 - Lobby and matchmaking routes verify pet ownership before creating battles.
