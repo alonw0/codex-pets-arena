@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Activity, LoaderCircle, Upload, Users } from "lucide-react";
+import { Activity, LoaderCircle, Trash2, Upload, Users } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { xpForNextLevel } from "@/lib/battle/progression";
 import { hydrateBadge, type EarnedBadge } from "@/lib/battle/badges";
@@ -34,6 +34,7 @@ export function DashboardClient() {
   const [arenaStats, setArenaStats] = useState<ArenaStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [removingPetId, setRemovingPetId] = useState("");
   const [status, setStatus] = useState("Loading your trainer room...");
 
   useEffect(() => {
@@ -113,16 +114,18 @@ export function DashboardClient() {
         if (token) {
           void loadActiveBattle(token).then(setActiveBattleId).catch(() => setActiveBattleId(null));
           if (petsWithMoves.some((pet) => !pet.thumbnail_path)) {
-            void backfillThumbnails(token, supabase!, petsWithMoves, (nextPets) => {
-              setPets(nextPets);
-              writeDashboardCache(user.id, {
-                profile: loadedProfile,
-                pets: nextPets,
-                badges: loadedBadges,
-                selectedPetId: selectedPetIdRef.current || nextSelectedPetId,
-                cachedAt: Date.now()
+            window.setTimeout(() => {
+              void backfillThumbnails(token, supabase!, petsWithMoves, (nextPets) => {
+                setPets(nextPets);
+                writeDashboardCache(user.id, {
+                  profile: loadedProfile,
+                  pets: nextPets,
+                  badges: loadedBadges,
+                  selectedPetId: selectedPetIdRef.current || nextSelectedPetId,
+                  cachedAt: Date.now()
+                });
               });
-            });
+            }, 3000);
           }
         }
         void loadArenaStats().then(setArenaStats).catch(() => setArenaStats(null));
@@ -149,7 +152,11 @@ export function DashboardClient() {
           {badges.length ? (
             <div className="trainer-badges">
               {badges.slice(0, 3).map((badge) => (
-                <span className="badge-chip" key={badge.key}>{badge.label}</span>
+                <span className="badge-chip" key={badge.key} title={badge.description}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img alt="" src={badge.iconPath} />
+                  {badge.label}
+                </span>
               ))}
             </div>
           ) : null}
@@ -197,44 +204,56 @@ export function DashboardClient() {
           ) : pets.length ? (
             <div className="roster-list">
               {pets.map((pet) => (
-                <button className={pet.id === selectedPetId ? "roster-row roster-row-active" : "roster-row"} key={pet.id} onClick={() => {
-                  selectedPetIdRef.current = pet.id;
-                  setSelectedPetId(pet.id);
-                }} type="button">
-                  <div className="roster-card-main">
-                    <div className="roster-thumb" aria-hidden="true">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {pet.thumbnail_url ? <img alt="" src={pet.thumbnail_url} /> : <span>{pet.name.slice(0, 1).toUpperCase()}</span>}
-                    </div>
-                    <div className="roster-card-name">
-                      <strong>{pet.name}</strong>
-                      <span>{pet.affinity}</span>
-                    </div>
-                    <strong className="level-badge">Lv {pet.level}</strong>
-                    <div className="roster-xp">
-                      <div className="roster-xp-track">
-                        <span style={{ width: `${Math.min(100, Math.round((pet.xp / xpForNextLevel(pet.level)) * 100))}%` }} />
+                <div className={pet.id === selectedPetId ? "roster-row roster-row-active" : "roster-row"} key={pet.id}>
+                  <button className="roster-select-button" onClick={() => {
+                    selectedPetIdRef.current = pet.id;
+                    setSelectedPetId(pet.id);
+                  }} type="button">
+                    <div className="roster-card-main">
+                      <div className="roster-thumb" aria-hidden="true">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {pet.thumbnail_url ? <img alt="" src={pet.thumbnail_url} /> : <span>{pet.name.slice(0, 1).toUpperCase()}</span>}
                       </div>
-                      <small>{pet.xp}/{xpForNextLevel(pet.level)} XP</small>
+                      <div className="roster-card-name">
+                        <strong>{pet.name}</strong>
+                        <span>{pet.affinity}</span>
+                      </div>
+                      <strong className="level-badge">Lv {pet.level}</strong>
+                      <div className="roster-xp">
+                        <div className="roster-xp-track">
+                          <span style={{ width: `${Math.min(100, Math.round((pet.xp / xpForNextLevel(pet.level)) * 100))}%` }} />
+                        </div>
+                        <small>{pet.xp}/{xpForNextLevel(pet.level)} XP</small>
+                      </div>
+                      <div className="pet-title-slots">
+                        {badges.slice(0, 2).length ? badges.slice(0, 2).map((badge) => (
+                          <span className="title-chip" key={`${pet.id}-${badge.key}`}>{badge.title}</span>
+                        )) : <span className="title-chip title-chip-empty">No title yet</span>}
+                      </div>
                     </div>
-                    <div className="pet-title-slots">
-                      {badges.slice(0, 2).length ? badges.slice(0, 2).map((badge) => (
-                        <span className="title-chip" key={`${pet.id}-${badge.key}`}>{badge.title}</span>
-                      )) : <span className="title-chip title-chip-empty">No title yet</span>}
+                    <div className="roster-moves">
+                      {(pet.moves ?? []).length ? (
+                        pet.moves?.map((move) => (
+                          <span className="move-chip" key={move.id}>
+                            {move.display_name} · {move.power}/{move.accuracy}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="move-chip move-chip-muted">No moves yet</span>
+                      )}
                     </div>
-                  </div>
-                  <div className="roster-moves">
-                    {(pet.moves ?? []).length ? (
-                      pet.moves?.map((move) => (
-                        <span className="move-chip" key={move.id}>
-                          {move.display_name} · {move.power}/{move.accuracy}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="move-chip move-chip-muted">No moves yet</span>
-                    )}
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    aria-label={`Remove ${pet.name}`}
+                    className="roster-remove-button"
+                    disabled={removingPetId === pet.id}
+                    onClick={() => void removePet(pet)}
+                    title={`Remove ${pet.name}`}
+                    type="button"
+                  >
+                    {removingPetId === pet.id ? <LoaderCircle className="spinner" size={18} /> : <Trash2 size={18} />}
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
@@ -247,6 +266,47 @@ export function DashboardClient() {
       </div>
     </section>
   );
+
+  async function removePet(pet: RosterPet) {
+    const approved = window.confirm(`Remove ${pet.name} from your roster?\n\nThis hides the pet from matchmaking and your dashboard. Only your own pets can be removed.`);
+    if (!approved || removingPetId) return;
+
+    setRemovingPetId(pet.id);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const session = await supabase?.auth.getSession();
+      const token = session?.data.session?.access_token;
+      const userId = session?.data.session?.user.id;
+      if (!token || !userId) throw new Error("Log in again to remove pets.");
+
+      const response = await fetch(`/api/pets/${pet.id}`, {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${token}` }
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Could not remove pet.");
+
+      const nextPets = pets.filter((candidate) => candidate.id !== pet.id);
+      const nextSelectedPetId = selectedPetId === pet.id ? nextPets[0]?.id ?? "" : selectedPetId;
+      setPets(nextPets);
+      setSelectedPetId(nextSelectedPetId);
+      selectedPetIdRef.current = nextSelectedPetId;
+      setStatus(nextPets.length ? "Pet removed. Choose a pet and find a fight." : "Pet removed. Upload a pet before matchmaking.");
+      if (profile) {
+        writeDashboardCache(userId, {
+          profile,
+          pets: nextPets,
+          badges,
+          selectedPetId: nextSelectedPetId,
+          cachedAt: Date.now()
+        });
+      }
+    } catch (removeError) {
+      setStatus(removeError instanceof Error ? removeError.message : "Could not remove pet.");
+    } finally {
+      setRemovingPetId("");
+    }
+  }
 }
 
 async function loadActiveBattle(token: string) {

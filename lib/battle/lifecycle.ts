@@ -51,6 +51,32 @@ export async function abandonUserActiveBattles(
   return results.find((result) => result.error)?.error ?? null;
 }
 
+export async function abandonUserStaleActiveBattles(supabase: SupabaseClient, userId: string) {
+  const safeUserId = assertUuid(userId);
+  const cutoff = new Date(Date.now() - STALE_ACTIVE_BATTLE_MINUTES * 60_000).toISOString();
+  const { data: battles, error } = await supabase
+    .from("battles")
+    .select("id")
+    .or(`player_id.eq.${safeUserId},opponent_id.eq.${safeUserId}`)
+    .eq("status", "active")
+    .lt("updated_at", cutoff)
+    .returns<Array<{ id: string }>>();
+
+  if (error) return error;
+  if (!battles?.length) return null;
+
+  const { error: updateError } = await supabase
+    .from("battles")
+    .update({
+      status: "abandoned",
+      updated_at: new Date().toISOString(),
+      completed_at: new Date().toISOString()
+    })
+    .in("id", battles.map((battle) => battle.id));
+
+  return updateError ?? null;
+}
+
 export async function abandonStaleActiveBattles(supabase: SupabaseClient) {
   const cutoff = new Date(Date.now() - STALE_ACTIVE_BATTLE_MINUTES * 60_000).toISOString();
   const { error } = await supabase

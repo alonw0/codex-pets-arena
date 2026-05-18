@@ -16,18 +16,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const action = normalizeBattleAction(body.action);
   if (!action) return NextResponse.json({ error: "Valid action is required." }, { status: 400 });
 
-  const { data: battle, error: battleError } = await supabase.from("battles").select("*").eq("id", id).maybeSingle<{
-    id: string;
-    player_id: string;
-    opponent_id: string | null;
-    player_pet_id: string;
-    opponent_pet_id: string | null;
-    mode?: "pvp" | "npc";
-    npc_master_key?: string | null;
-    current_turn: number;
-    state: BattleState;
-    status: string;
-  }>();
+  const { data: battle, error: battleError } = await supabase
+    .from("battles")
+    .select("id, player_id, opponent_id, player_pet_id, opponent_pet_id, mode, current_turn, state, status")
+    .eq("id", id)
+    .maybeSingle<{
+      id: string;
+      player_id: string;
+      opponent_id: string | null;
+      player_pet_id: string;
+      opponent_pet_id: string | null;
+      mode?: "pvp" | "npc";
+      current_turn: number;
+      state: BattleState;
+      status: string;
+    }>();
 
   if (battleError || !battle) return NextResponse.json({ error: "Battle not found." }, { status: 404 });
   if (battle.status !== "active") return NextResponse.json({ error: "Battle is not active." }, { status: 409 });
@@ -42,7 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { data: existingTurn } = await supabase
     .from("battle_turns")
-    .select("*")
+    .select("id, player_action, opponent_action, resolved_log, rng_seed")
     .eq("battle_id", id)
     .eq("turn_number", turnNumber)
     .maybeSingle<{
@@ -65,11 +68,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const seed = Math.floor(Math.random() * 1_000_000_000);
 
   const { data: turn, error: turnError } = existingTurn
-    ? await supabase.from("battle_turns").update(turnPatch).eq("id", existingTurn.id).select("*").single()
+    ? await supabase.from("battle_turns").update(turnPatch).eq("id", existingTurn.id).select("id").single()
     : await supabase
         .from("battle_turns")
         .insert({ battle_id: id, turn_number: turnNumber, rng_seed: seed, timeout_flags: {}, ...turnPatch })
-        .select("*")
+        .select("id")
         .single();
 
   if (turnError || !turn) return NextResponse.json({ error: turnError?.message ?? "Could not submit action." }, { status: 500 });

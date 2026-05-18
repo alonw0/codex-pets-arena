@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createBattleFromDb, type DbMove, type DbPet } from "@/lib/battle/db";
-import { abandonStaleActiveBattles, abandonUserActiveBattles } from "@/lib/battle/lifecycle";
+import { abandonUserActiveBattles, abandonUserStaleActiveBattles } from "@/lib/battle/lifecycle";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { petId?: string };
   if (!body.petId) return NextResponse.json({ error: "petId is required." }, { status: 400 });
 
-  const staleError = await abandonStaleActiveBattles(supabase);
+  const staleError = await abandonUserStaleActiveBattles(supabase, user.id);
   if (staleError) return NextResponse.json({ error: staleError.message }, { status: 500 });
 
   const abandonError = await abandonUserActiveBattles(supabase, user.id, "A trainer left to find a new random fight.");
@@ -20,7 +20,12 @@ export async function POST(request: Request) {
 
   await supabase.from("match_queue").delete().eq("user_id", user.id);
 
-  const { data: pet, error: petError } = await supabase.from("pets").select("*").eq("id", body.petId).eq("owner_id", user.id).single<DbPet>();
+  const { data: pet, error: petError } = await supabase
+    .from("pets")
+    .select("id, owner_id, name, description, affinity, level, xp, stats, spritesheet_path")
+    .eq("id", body.petId)
+    .eq("owner_id", user.id)
+    .single<DbPet>();
   if (petError || !pet) return NextResponse.json({ error: "Selected pet was not found." }, { status: 404 });
 
   const { data: opponentQueue } = await supabase
@@ -54,10 +59,18 @@ async function createBattle(
   supabase: NonNullable<Awaited<ReturnType<typeof getBearerUser>>["supabase"]>,
   input: { playerId: string; playerPetId: string; opponentId: string; opponentPetId: string }
 ) {
-  const { data: pets, error: petsError } = await supabase.from("pets").select("*").in("id", [input.playerPetId, input.opponentPetId]).returns<DbPet[]>();
+  const { data: pets, error: petsError } = await supabase
+    .from("pets")
+    .select("id, owner_id, name, description, affinity, level, xp, stats, spritesheet_path")
+    .in("id", [input.playerPetId, input.opponentPetId])
+    .returns<DbPet[]>();
   if (petsError || !pets || pets.length !== 2) return { error: "Could not load matched pets." };
 
-  const { data: moves, error: movesError } = await supabase.from("moves").select("*").in("pet_id", [input.playerPetId, input.opponentPetId]).returns<DbMove[]>();
+  const { data: moves, error: movesError } = await supabase
+    .from("moves")
+    .select("id, pet_id, slot, display_name, move_key, power, accuracy, category, affinity, max_charges, effect")
+    .in("pet_id", [input.playerPetId, input.opponentPetId])
+    .returns<DbMove[]>();
   if (movesError) return { error: "Could not load pet moves." };
 
   const playerPet = pets.find((pet) => pet.id === input.playerPetId)!;

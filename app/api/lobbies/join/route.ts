@@ -22,14 +22,22 @@ export async function POST(request: Request) {
   if (lobbyError || !lobby) return NextResponse.json({ error: "Lobby was not found or is no longer open." }, { status: 404 });
   if (lobby.host_id === user.id) return NextResponse.json({ error: "You cannot join your own lobby." }, { status: 400 });
 
-  const { data: pets, error: petsError } = await supabase.from("pets").select("*").in("id", [lobby.host_pet_id, body.petId]).returns<DbPet[]>();
+  const { data: pets, error: petsError } = await supabase
+    .from("pets")
+    .select("id, owner_id, name, description, affinity, level, xp, stats, spritesheet_path")
+    .in("id", [lobby.host_pet_id, body.petId])
+    .returns<DbPet[]>();
   if (petsError || !pets || pets.length !== 2) return NextResponse.json({ error: "Could not load lobby pets." }, { status: 500 });
 
   const hostPet = pets.find((pet) => pet.id === lobby.host_pet_id && pet.owner_id === lobby.host_id);
   const guestPet = pets.find((pet) => pet.id === body.petId && pet.owner_id === user.id);
   if (!hostPet || !guestPet) return NextResponse.json({ error: "Lobby pet ownership could not be verified." }, { status: 403 });
 
-  const { data: moves, error: movesError } = await supabase.from("moves").select("*").in("pet_id", [lobby.host_pet_id, body.petId]).returns<DbMove[]>();
+  const { data: moves, error: movesError } = await supabase
+    .from("moves")
+    .select("id, pet_id, slot, display_name, move_key, power, accuracy, category, affinity, max_charges, effect")
+    .in("pet_id", [lobby.host_pet_id, body.petId])
+    .returns<DbMove[]>();
   if (movesError) return NextResponse.json({ error: "Could not load pet moves." }, { status: 500 });
 
   const state = createBattleFromDb(

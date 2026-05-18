@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Flag, Link2, LoaderCircle, MessageCircle, RotateCcw, Send, Share2, Shield, Swords, Trophy, Zap } from "lucide-react";
 import { ensureActiveSide, resolveActiveTurn } from "@/lib/battle/engine";
+import { hydrateBadge } from "@/lib/battle/badges";
 import { xpForNextLevel } from "@/lib/battle/progression";
 import type { BattleAction, BattleMove, BattleSide, BattleState, TurnEvent } from "@/lib/battle/types";
 import { createDemoBattle } from "@/lib/demo";
@@ -390,7 +391,7 @@ type ResultSummary = {
   winner: BattleState["player"];
   xpGained: number;
   levelUp?: { oldLevel: number; newLevel: number };
-  newBadges: Array<{ badgeKey: string; label: string; title: string }>;
+  newBadges: Array<{ badgeKey: string; iconPath?: string; label: string; title: string }>;
   recap: {
     totalDamage: number;
     biggestHit: number;
@@ -468,7 +469,15 @@ function ResultPanel({
           <strong>New badges</strong>
           <div>
             {result.newBadges.map((badge) => (
-              <span className="badge-chip" key={badge.badgeKey}>{badge.label}</span>
+              <span className="badge-chip" key={badge.badgeKey} title={badge.title}>
+                {badge.iconPath ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="" src={badge.iconPath} />
+                  </>
+                ) : null}
+                {badge.label}
+              </span>
             ))}
           </div>
         </div>
@@ -656,7 +665,10 @@ function buildResultSummary(displayState: BattleState, displayEvents: TurnEvent[
   const favoriteMove = [...usedMoves.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Guard";
   const newBadges = displayEvents
     .filter((event): event is Extract<TurnEvent, { kind: "badge" }> => event.kind === "badge" && event.target === winnerSide)
-    .map((event) => ({ badgeKey: event.badgeKey, label: event.label, title: event.title }));
+    .map((event) => {
+      const badge = hydrateBadge(event.badgeKey);
+      return { badgeKey: event.badgeKey, iconPath: badge?.iconPath, label: event.label, title: event.title };
+    });
 
   return {
     outcome: winnerSide === "player" ? "win" : "loss",

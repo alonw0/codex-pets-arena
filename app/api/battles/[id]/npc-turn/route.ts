@@ -10,14 +10,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!supabase || !user) return NextResponse.json({ error }, { status: 401 });
 
   const { id } = await params;
-  const { data: battle, error: battleError } = await supabase.from("battles").select("*").eq("id", id).maybeSingle<{
-    id: string;
-    player_id: string;
-    mode?: "pvp" | "npc";
-    current_turn: number;
-    state: BattleState;
-    status: string;
-  }>();
+  const { data: battle, error: battleError } = await supabase
+    .from("battles")
+    .select("id, player_id, mode, current_turn, state, status")
+    .eq("id", id)
+    .maybeSingle<{
+      id: string;
+      player_id: string;
+      mode?: "pvp" | "npc";
+      current_turn: number;
+      state: BattleState;
+      status: string;
+    }>();
 
   if (battleError || !battle) return NextResponse.json({ error: "Battle not found." }, { status: 404 });
   if (battle.player_id !== user.id) return NextResponse.json({ error: "Not a battle participant." }, { status: 403 });

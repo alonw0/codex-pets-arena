@@ -15,6 +15,7 @@ export type BadgeDefinition = {
   label: string;
   title: string;
   description: string;
+  iconPath: string;
 };
 
 export type EarnedBadge = BadgeDefinition & {
@@ -26,43 +27,50 @@ export const BADGES: Record<BadgeKey, BadgeDefinition> = {
     key: "first-upload",
     label: "First Upload",
     title: "Pet Handler",
-    description: "Uploaded the first arena pet."
+    description: "Uploaded the first arena pet.",
+    iconPath: "/badges/first-upload.png"
   },
   "first-win": {
     key: "first-win",
     label: "First Win",
     title: "Rookie Victor",
-    description: "Won the first battle."
+    description: "Won the first battle.",
+    iconPath: "/badges/first-win.png"
   },
   "hot-streak": {
     key: "hot-streak",
     label: "Hot Streak",
     title: "Streak Starter",
-    description: "Reached 3 wins."
+    description: "Reached 3 wins.",
+    iconPath: "/badges/hot-streak.png"
   },
   comeback: {
     key: "comeback",
     label: "Comeback",
     title: "Clutch Trainer",
-    description: "Won while the winning pet was under 20% HP."
+    description: "Won while the winning pet was under 20% HP.",
+    iconPath: "/badges/comeback.png"
   },
   collector: {
     key: "collector",
     label: "Collector",
     title: "Pet Collector",
-    description: "Uploaded 5 pets."
+    description: "Uploaded 5 pets.",
+    iconPath: "/badges/collector.png"
   },
   rivalry: {
     key: "rivalry",
     label: "Rivalry",
     title: "Rival Breaker",
-    description: "Beat the same opponent twice."
+    description: "Beat the same opponent twice.",
+    iconPath: "/badges/rivalry.png"
   },
   veteran: {
     key: "veteran",
     label: "Veteran",
     title: "Arena Veteran",
-    description: "Reached 10 wins."
+    description: "Reached 10 wins.",
+    iconPath: "/badges/veteran.png"
   }
 };
 
