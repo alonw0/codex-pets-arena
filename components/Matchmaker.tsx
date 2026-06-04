@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, Crown, Dices, Link2, LoaderCircle, MessageCircle, Send, Share2, Swords } from "lucide-react";
 import { NPC_MASTERS } from "@/lib/battle/masters";
+import type { BattleState } from "@/lib/battle/types";
+import { LOBBY_CODE_LENGTH, normalizeLobbyCode } from "@/lib/security/lobbyCodes";
 import { buildShareLink, getClientShareUrl, nativeShareOrCopy, type SharePayload, type SharePlatform } from "@/lib/share";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -29,8 +32,23 @@ export type RosterMove = {
   max_charges: number;
 };
 
+type MasterChallengePayload = {
+  battleId: string;
+  battle: {
+    state: BattleState;
+    status: "active";
+    mode: "npc";
+    npc_master_key: string;
+  };
+  side: "player";
+  mode: "npc";
+  npcMasterKey: string;
+  spriteUrls?: string[];
+};
+
 export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: RosterPet[]; selectedPetId?: string; onSelectPet?: (petId: string) => void }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [code, setCode] = useState("");
   const [createdLobbyId, setCreatedLobbyId] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -40,9 +58,16 @@ export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: R
   const [randomBusy, setRandomBusy] = useState(false);
   const [showMasterOffer, setShowMasterOffer] = useState(false);
   const [masterBusy, setMasterBusy] = useState("");
+  const [masterStage, setMasterStage] = useState("");
   const selected = selectedPetId || pets[0]?.id || "";
   const selectedPet = pets.find((pet) => pet.id === selected);
   const recommendedMaster = pickRecommendedMaster(selectedPet?.level ?? 1);
+  const busyMaster = masterBusy ? NPC_MASTERS.find((master) => master.key === masterBusy) : null;
+
+  useEffect(() => {
+    const inviteCode = searchParams.get("code");
+    if (inviteCode) setJoinCode(normalizeLobbyCode(inviteCode));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!createdLobbyId) return;
@@ -172,12 +197,13 @@ export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: R
   }
 
   async function joinLobby() {
-    if (!selected || !joinCode) {
-      setStatus("Choose a pet and enter a code.");
+    const normalizedCode = normalizeLobbyCode(joinCode);
+    if (!selected || normalizedCode.length !== LOBBY_CODE_LENGTH) {
+      setStatus(`Choose a pet and enter the ${LOBBY_CODE_LENGTH}-character code.`);
       return;
     }
     try {
-      const payload = (await authedFetch("/api/lobbies/join", { petId: selected, code: joinCode })) as { battleId: string };
+      const payload = (await authedFetch("/api/lobbies/join", { petId: selected, code: normalizedCode })) as { battleId: string };
       router.push(`/battle/${payload.battleId}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not join lobby.");
@@ -189,17 +215,32 @@ export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: R
       setStatus("Choose or upload a pet first.");
       return;
     }
+    let didNavigate = false;
+    const master = NPC_MASTERS.find((candidate) => candidate.key === masterKey);
     try {
-      setRandomWaiting(false);
-      setShowMasterOffer(false);
-      setMasterBusy(masterKey);
-      setStatus("Opening master challenge...");
-      const payload = (await authedFetch("/api/masters/challenge", { petId: selected, masterKey })) as { battleId: string };
+      flushSync(() => {
+        setRandomWaiting(false);
+        setShowMasterOffer(false);
+        setMasterBusy(masterKey);
+        setMasterStage(`Preparing ${master?.name ?? "master"} challenge`);
+        setStatus("");
+      });
+      const payload = (await authedFetch("/api/masters/challenge", { petId: selected, masterKey })) as MasterChallengePayload;
+      setMasterStage("Loading battle sprites");
+      cacheBattleSnapshot(payload);
+      await preloadImages(payload.spriteUrls ?? []);
+      setMasterStage("Entering arena");
+      didNavigate = true;
       router.push(`/battle/${payload.battleId}`);
     } catch (error) {
+      setMasterBusy("");
+      setMasterStage("");
       setStatus(error instanceof Error ? error.message : "Could not start master challenge.");
     } finally {
-      setMasterBusy("");
+      if (!didNavigate) {
+        setMasterBusy("");
+        setMasterStage("");
+      }
     }
   }
 
@@ -249,7 +290,7 @@ export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: R
         <div className="match-card">
           <Swords size={26} />
           <strong>Join code</strong>
-          <input maxLength={6} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="ABC123" value={joinCode} />
+          <input maxLength={LOBBY_CODE_LENGTH} onChange={(event) => setJoinCode(normalizeLobbyCode(event.target.value))} placeholder="ABCD2345" value={joinCode} />
           <button className="primary-button compact" onClick={joinLobby} type="button">Enter</button>
         </div>
       </div>
@@ -274,9 +315,18 @@ export function Matchmaker({ pets = [], selectedPetId, onSelectPet }: { pets?: R
           <Crown size={22} />
         </div>
         <p className="muted">Fight curated NPC masters for reduced training XP while the arena fills up.</p>
+        {busyMaster ? (
+          <div className="master-prep-panel" role="status" aria-live="polite">
+            <LoaderCircle className="spinner" size={22} />
+            <div>
+              <strong>{masterStage || `Preparing ${busyMaster.name}`}</strong>
+              <span>{selectedPet?.name ?? "Your pet"} vs {busyMaster.name}. Stay here, the arena opens when everything is ready.</span>
+            </div>
+          </div>
+        ) : null}
         <div className="masters-grid">
           {NPC_MASTERS.map((master) => (
-            <button className="master-card" disabled={!selected || Boolean(masterBusy)} key={master.key} onClick={() => challengeMaster(master.key)} type="button">
+            <button className={masterBusy === master.key ? "master-card master-card-selected" : "master-card"} disabled={!selected || Boolean(masterBusy)} key={master.key} onClick={() => challengeMaster(master.key)} type="button">
               <span className="master-card-topline">
                 <strong>{master.name}</strong>
                 <small>Lv {master.level}</small>
@@ -325,7 +375,7 @@ function buildInviteSharePayload(code: string, petName?: string): SharePayload {
   return {
     title: "Challenge my Codex pet",
     text: `${petCopy} is waiting in Codex Pet Arena. Use lobby code ${code} and bring something tougher than vibes.`,
-    url: getClientShareUrl("/")
+    url: getClientShareUrl(`/dashboard?code=${encodeURIComponent(code)}`)
   };
 }
 
@@ -341,4 +391,43 @@ async function getAccessToken() {
   const token = data.session?.access_token;
   if (!token) throw new Error("Log in before matchmaking.");
   return token;
+}
+
+function cacheBattleSnapshot(payload: MasterChallengePayload) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      `arena:battle:${payload.battleId}`,
+      JSON.stringify({
+        battle: payload.battle,
+        side: payload.side,
+        mode: payload.mode,
+        npcMasterKey: payload.npcMasterKey,
+        expiresAt: Date.now() + 60_000
+      })
+    );
+  } catch {
+    // Cache is a UX optimization only. Battle loading still works without it.
+  }
+}
+
+async function preloadImages(urls: string[]) {
+  const uniqueUrls = [...new Set(urls.filter(Boolean))];
+  await Promise.all(uniqueUrls.map((url) => preloadImage(url).catch(() => undefined)));
+}
+
+function preloadImage(url: string) {
+  return new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    const timeout = window.setTimeout(() => resolve(), 5000);
+    image.onload = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    image.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error(`Could not load ${url}`));
+    };
+    image.src = url;
+  });
 }

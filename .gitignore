@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 npm-debug.log*
 pnpm-lock.yaml
 yarn.lock
+.superpowers/

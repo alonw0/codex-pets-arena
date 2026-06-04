@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, Sparkles } from "lucide-react";
+import { LoaderCircle, LogIn, Sparkles } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function AuthForm() {
@@ -11,31 +11,40 @@ export function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("Log in with the email address you confirmed.");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit(mode: "signIn" | "signUp") {
+    if (isSubmitting) return;
     const supabase = createSupabaseBrowserClient();
     if (!supabase) {
       setMessage("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.");
       return;
     }
 
-    const result =
-      mode === "signIn"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+    setIsSubmitting(true);
+    setMessage(mode === "signIn" ? "Logging in..." : "Creating your account...");
 
-    if (result.error) {
-      setMessage(result.error.message);
-      return;
+    try {
+      const result =
+        mode === "signIn"
+          ? await supabase.auth.signInWithPassword({ email, password })
+          : await supabase.auth.signUp({ email, password });
+
+      if (result.error) {
+        setMessage(result.error.message);
+        return;
+      }
+
+      if (mode === "signIn") {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+
+      setMessage("Check your email to confirm your account, then come back and log in.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (mode === "signIn") {
-      router.push("/dashboard");
-      router.refresh();
-      return;
-    }
-
-    setMessage("Check your email to confirm your account, then come back and log in.");
   }
 
   const isSignup = mode === "signUp";
@@ -52,13 +61,13 @@ export function AuthForm() {
         </p>
       </div>
       <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-        <button className={mode === "signIn" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => {
+        <button disabled={isSubmitting} className={mode === "signIn" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => {
           setMode("signIn");
           setMessage("Log in with the email address you confirmed.");
         }} type="button">
           Log in
         </button>
-        <button className={mode === "signUp" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => {
+        <button disabled={isSubmitting} className={mode === "signUp" ? "auth-tab auth-tab-active" : "auth-tab"} onClick={() => {
           setMode("signUp");
           setMessage("Create an account, then confirm your email before logging in.");
         }} type="button">
@@ -74,9 +83,9 @@ export function AuthForm() {
         <input autoComplete={isSignup ? "new-password" : "current-password"} onChange={(event) => setPassword(event.target.value)} placeholder="********" type="password" value={password} />
       </label>
       <div className="button-row">
-        <button className="primary-button auth-submit" onClick={() => submit(mode)} type="button">
-          {isSignup ? <Sparkles size={18} /> : <LogIn size={18} />}
-          {isSignup ? "Create account" : "Log in"}
+        <button className="primary-button auth-submit" disabled={isSubmitting} onClick={() => submit(mode)} type="button">
+          {isSubmitting ? <LoaderCircle className="spinner" size={18} /> : isSignup ? <Sparkles size={18} /> : <LogIn size={18} />}
+          {isSubmitting ? (isSignup ? "Creating account" : "Logging in") : isSignup ? "Create account" : "Log in"}
         </button>
       </div>
       <div className={isSignup ? "auth-note auth-note-confirm" : "auth-note"}>

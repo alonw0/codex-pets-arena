@@ -603,6 +603,28 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.master-prep-panel {
+  align-items: center;
+  background: #edf5ff;
+  border: 3px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 0 rgba(23, 21, 31, 0.16);
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+}
+
+.master-prep-panel div {
+  display: grid;
+  gap: 3px;
+}
+
+.master-prep-panel span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .master-card {
   background: linear-gradient(135deg, #fff6d8 0 62%, #e7e0f5 62% 100%);
   border: 3px solid var(--line);
@@ -620,6 +642,11 @@ select {
 .master-card:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.master-card-selected {
+  background: linear-gradient(135deg, #dff2be 0 62%, #edf5ff 62% 100%);
+  opacity: 1;
 }
 
 .master-card-topline {
@@ -1088,8 +1115,78 @@ select {
   border: 3px solid var(--line);
   border-radius: 8px;
   display: flex;
+  gap: 18px;
   justify-content: space-between;
   padding: 14px;
+}
+
+.history-row-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-row-title {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  line-height: 1.2;
+}
+
+.history-row-title span,
+.history-row-meta {
+  color: var(--muted);
+}
+
+.history-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 8px 14px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.history-status {
+  align-items: center;
+  border: 3px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+  min-width: 92px;
+  justify-content: center;
+  padding: 7px 12px;
+  text-transform: uppercase;
+}
+
+.history-status.win {
+  background: #dff2be;
+}
+
+.history-status.loss {
+  background: #ffd8d2;
+}
+
+.history-status.active {
+  background: #edf5ff;
+}
+
+.history-status.abandoned,
+.history-status.complete {
+  background: #fdf7e8;
+}
+
+.history-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 18px;
 }
 
 .battle-shell {
@@ -1968,6 +2065,8 @@ select {
   .top-nav,
   .top-nav > div,
   .empty-state,
+  .history-row,
+  .master-prep-panel,
   .queue-fallback-offer,
   .upload-success,
   .upload-grid,
@@ -1980,6 +2079,10 @@ select {
 
   .top-nav {
     gap: 12px;
+  }
+
+  .history-status {
+    width: 100%;
   }
 
   .battle-stage {

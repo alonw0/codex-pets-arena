@@ -17,17 +17,39 @@ type BattleArenaProps = {
   initialState?: BattleState;
 };
 
+type CachedBattleSnapshot = {
+  battle: {
+    state: BattleState;
+    status?: "active" | "complete" | "abandoned";
+    mode?: "pvp" | "npc";
+    npc_master_key?: string | null;
+  };
+  side?: BattleSide;
+  mode?: "pvp" | "npc";
+  npcMasterKey?: string | null;
+  expiresAt?: number;
+};
+
 export function BattleArena({ battleId, initialState }: BattleArenaProps) {
   const router = useRouter();
-  const [state, setState] = useState<BattleState | null>(() => (battleId ? initialState ? ensureActiveSide(initialState) : null : ensureActiveSide(initialState ?? createDemoBattle())));
+  const cachedBattleRef = useRef<CachedBattleSnapshot | null | undefined>(undefined);
+  if (cachedBattleRef.current === undefined) {
+    cachedBattleRef.current = battleId ? readCachedBattleSnapshot(battleId) : null;
+  }
+  const cachedBattle = cachedBattleRef.current;
+  const [state, setState] = useState<BattleState | null>(() => {
+    if (!battleId) return ensureActiveSide(initialState ?? createDemoBattle());
+    if (initialState) return ensureActiveSide(initialState);
+    return cachedBattle?.battle.state ? ensureActiveSide(cachedBattle.battle.state) : null;
+  });
   const [events, setEvents] = useState<TurnEvent[]>([]);
-  const [mySide, setMySide] = useState<BattleSide>("player");
-  const [status, setStatus] = useState(battleId ? "Loading battle..." : "");
-  const [battleStatus, setBattleStatus] = useState<"active" | "complete" | "abandoned">("active");
-  const [battleMode, setBattleMode] = useState<"pvp" | "npc">("pvp");
-  const [npcMasterKey, setNpcMasterKey] = useState<string | null>(null);
+  const [mySide, setMySide] = useState<BattleSide>(cachedBattle?.side ?? "player");
+  const [status, setStatus] = useState(battleId && !cachedBattle ? "Loading battle..." : "");
+  const [battleStatus, setBattleStatus] = useState<"active" | "complete" | "abandoned">(cachedBattle?.battle.status ?? "active");
+  const [battleMode, setBattleMode] = useState<"pvp" | "npc">(cachedBattle?.mode ?? cachedBattle?.battle.mode ?? "pvp");
+  const [npcMasterKey, setNpcMasterKey] = useState<string | null>(cachedBattle?.npcMasterKey ?? cachedBattle?.battle.npc_master_key ?? null);
   const [leaveBusy, setLeaveBusy] = useState(false);
-  const [isLoadingBattle, setIsLoadingBattle] = useState(Boolean(battleId && !initialState));
+  const [isLoadingBattle, setIsLoadingBattle] = useState(Boolean(battleId && !initialState && !cachedBattle));
   const [timer, setTimer] = useState(29);
   const [shareStatus, setShareStatus] = useState("");
   const [rematchStatus, setRematchStatus] = useState("");
@@ -39,9 +61,10 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
 
   useEffect(() => {
     if (!battleId) return;
+    const activeBattleId = battleId;
     let cancelled = false;
     const supabase = createSupabaseBrowserClient();
-    loadBattle(true);
+    loadBattle(!cachedBattle);
 
     async function loadBattle(preloadSprites = false) {
       try {
@@ -67,6 +90,7 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
         setEvents((payload.events ?? []).map((eventRow) => eventRow.event).slice(-12));
         setMySide(payload.side ?? "player");
         setStatus("");
+        clearCachedBattleSnapshot(activeBattleId);
       } catch (error) {
         if (cancelled) return;
         setStatus(error instanceof Error ? error.message : "Could not load battle.");
@@ -110,7 +134,7 @@ export function BattleArena({ battleId, initialState }: BattleArenaProps) {
       window.removeEventListener("focus", refreshOnFocus);
       if (channel && supabase) supabase.removeChannel(channel);
     };
-  }, [battleId]);
+  }, [battleId, cachedBattle]);
 
   useEffect(() => {
     if (!battleStateId) return;
@@ -864,6 +888,31 @@ async function getAccessToken() {
 async function preloadBattleSprites(state: BattleState) {
   const urls = [state.player.spriteUrl, state.opponent.spriteUrl].filter((url): url is string => Boolean(url));
   await Promise.all(urls.map((url) => preloadImage(url).catch(() => undefined)));
+}
+
+function readCachedBattleSnapshot(battleId: string): CachedBattleSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`arena:battle:${battleId}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedBattleSnapshot;
+    if (!cached.battle?.state || cached.expiresAt && cached.expiresAt < Date.now()) {
+      window.sessionStorage.removeItem(`arena:battle:${battleId}`);
+      return null;
+    }
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedBattleSnapshot(battleId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(`arena:battle:${battleId}`);
+  } catch {
+    // The cache is only used to skip the first loading screen.
+  }
 }
 
 function preloadImage(url: string) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createBattleFromDb, type DbMove, type DbPet } from "@/lib/battle/db";
+import { LOBBY_CODE_LENGTH, normalizeLobbyCode } from "@/lib/security/lobbyCodes";
 import { ensureProfile, getBearerUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -10,11 +11,13 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as { code?: string; petId?: string };
   if (!body.code || !body.petId) return NextResponse.json({ error: "code and petId are required." }, { status: 400 });
+  const code = normalizeLobbyCode(body.code);
+  if (code.length !== LOBBY_CODE_LENGTH) return NextResponse.json({ error: `Enter the ${LOBBY_CODE_LENGTH}-character lobby code.` }, { status: 400 });
 
   const { data: lobby, error: lobbyError } = await supabase
     .from("lobbies")
     .select("*")
-    .eq("code", body.code.toUpperCase())
+    .eq("code", code)
     .eq("status", "open")
     .gt("expires_at", new Date().toISOString())
     .maybeSingle<{ id: string; code: string; host_id: string; host_pet_id: string; guest_id: string | null }>();
